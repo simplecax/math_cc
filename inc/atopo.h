@@ -1,5 +1,5 @@
-#ifndef AT_OPO_H
-#define AT_OPO_H
+#ifndef ATOPO_H
+#define ATOPO_H
 
 #include <iostream>
 #include <vector>
@@ -194,4 +194,4 @@ namespace atopo {
 } // namespace atopo
 
 
-#endif // AT_OPO_H
+#endif // ATOPO_H
