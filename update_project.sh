@@ -1,22 +1,19 @@
 #!/bin/bash
 
-# This script upgrades the CellComplex implementation in 'inc/atopo.h'
-# to a more robust, efficient, and general architecture.
-#
-# Key Improvements:
-# 1. Hybrid Storage: Optimized for standard boundary maps (p -> p-1) and
-#    general storage for non-adjacent incidences (i -> j).
-# 2. Canonical Keying: Avoids redundant data storage by recognizing that
-#    the map for (j,i) is the transpose of the map for (i,j).
+# This script upgrades the project to include the Tier 1 Homology Calculation
+# functionality. It updates the core header, adds a new test file, and
+# modifies the CMakeLists.txt to build the new tests.
 
 set -e
 
-echo "⚙️  Upgrading 'inc/atopo.h' to the new CellComplex architecture..."
+echo "⚙️  Upgrading project to Tier 1..."
+echo "-----------------------------------"
 
-# Overwrite the existing atopo.h with the upgraded version.
+# --- Step 1: Update the core header file ---
+echo "1. Updating 'inc/atopo.h' with homology calculation logic..."
 cat << 'EOF' > inc/atopo.h
-#ifndef AT_OPO_H
-#define AT_OPO_H
+#ifndef ATOPO_H
+#define ATOPO_H
 
 #include <iostream>
 #include <vector>
@@ -26,13 +23,20 @@ cat << 'EOF' > inc/atopo.h
 #include <map>
 #include <utility>
 #include <algorithm>
+#include <numeric> // For std::gcd
 
-// Eigen is a header-only library for linear algebra.
+// Eigen is a header-only library for linear algebra, used for our sparse matrix and vector operations.
 #include <Eigen/Sparse>
+#include <Eigen/Dense> // Required for SNF computation
 
 /**
- * @namespace atopo (Algebraic Topology)
- * @brief The core namespace for the generic topology framework.
+ * @file atopo.h
+ * @brief A single-header, trait-based C++ framework for algebraic topology.
+ */
+
+/**
+ * @namespace atopo
+ * @brief The core namespace for the algebraic topology framework.
  */
 namespace atopo {
 
@@ -43,71 +47,103 @@ namespace atopo {
     using IncidenceMatrix = Eigen::SparseMatrix<Coefficient<T>>;
     using DimensionPair = std::pair<int, int>;
 
-    // --- TRAITS (Interfaces for User Specialization) ---
+
+    // --- TRAITS (Compile-Time Polymorphism via Specialization) ---
+
+    /**
+     * @brief Trait class to adapt a user-defined type to be a "cell".
+     */
     template<typename CellType>
-    struct CellTraits { /* User specializes */ };
+    struct CellTraits {
+        static constexpr int dimension = -1;
+        using GeometryType = void;
+        static GeometryType get_geometry(const CellType& cell);
+    };
+
+    /**
+     * @brief Trait class to adapt a user's data source to build a CellComplex.
+     */
     template<typename TopologySource>
     struct TopologySourceTraits { /* User specializes */ };
 
 
+    // --- Implementation Detail for Homology ---
+    namespace detail {
+        /**
+         * @brief A basic implementation of Smith Normal Form (SNF) to find matrix rank.
+         */
+        inline int snf_rank(const atopo::IncidenceMatrix<int>& sparse_mat) {
+            if (sparse_mat.nonZeros() == 0) return 0;
+
+            Eigen::MatrixXi mat = sparse_mat; // Convert to dense for manipulation
+            int rows = mat.rows();
+            int cols = mat.cols();
+            int rank = 0;
+            int pivot_row = 0;
+
+            for (int pivot_col = 0; pivot_col < cols && pivot_row < rows; ++pivot_col) {
+                // Find a non-zero pivot in the current column
+                int i = pivot_row;
+                while (i < rows && mat(i, pivot_col) == 0) {
+                    i++;
+                }
+
+                if (i < rows) { // Found a pivot
+                    mat.row(pivot_row).swap(mat.row(i)); // Move pivot to current row
+                    
+                    // Use row operations to make the pivot the GCD of its column
+                    for(int j = pivot_row + 1; j < rows; ++j) {
+                        while(mat(j, pivot_col) != 0) {
+                             int q = mat(pivot_row, pivot_col) / mat(j, pivot_col);
+                             mat.row(pivot_row) -= q * mat.row(j);
+                             mat.row(pivot_row).swap(mat.row(j));
+                        }
+                    }
+
+                    // Zero out the rest of the column below the pivot
+                    for (int j = pivot_row + 1; j < rows; ++j) {
+                       if (mat(j, pivot_col) != 0) {
+                           int factor = mat(j, pivot_col) / mat(pivot_row, pivot_col);
+                           mat.row(j) -= factor * mat.row(pivot_row);
+                       }
+                    }
+                    
+                    if (mat(pivot_row, pivot_col) != 0) {
+                        rank++;
+                        pivot_row++;
+                    }
+                }
+            }
+            return rank;
+        }
+    } // namespace detail
+
+
     // --- CORE FRAMEWORK CLASSES & FUNCTIONS ---
 
-    template<typename T> struct ChainBase { /* ... as before ... */ };
-    template<typename T> struct Chain : public ChainBase<T> { /* ... as before ... */ };
-    template<typename T> struct Cochain : public ChainBase<T> { /* ... as before ... */ };
-    // NOTE: The definitions for ChainBase, Chain, and Cochain are unchanged
-    // from the previous version and are omitted here for brevity, but they
-    // should be included in the actual file. They are included in the script.
-
-    /**
-     * @struct ChainBase
-     * @brief A common base struct for Chains and Cochains to avoid code duplication.
-     */
     template<typename T>
     struct ChainBase {
         int dimension;
         Eigen::SparseVector<Coefficient<T>> data;
-
-        // Constructor
         ChainBase(int p, const Eigen::SparseVector<Coefficient<T>>& vec) : dimension(p), data(vec) {}
         ChainBase(int p, Eigen::SparseVector<Coefficient<T>>&& vec) : dimension(p), data(std::move(vec)) {}
     };
 
-    /**
-     * @struct Chain
-     * @brief Represents a p-chain. Inherits its structure from ChainBase.
-     */
     template<typename T>
-    struct Chain : public ChainBase<T> {
-        using ChainBase<T>::ChainBase;
-    };
+    struct Chain : public ChainBase<T> { using ChainBase<T>::ChainBase; };
     
-    /**
-     * @struct Cochain
-     * @brief Represents a p-cochain. Inherits its structure from ChainBase.
-     */
     template<typename T>
-    struct Cochain : public ChainBase<T> {
-        using ChainBase<T>::ChainBase;
-    };
+    struct Cochain : public ChainBase<T> { using ChainBase<T>::ChainBase; };
 
-    /**
-     * @class CellComplex
-     * @brief A robust and efficient data structure for a general cell complex.
-     * Uses a hybrid storage model optimized for standard boundary operators
-     * while supporting arbitrary incidence relations via canonical keying.
-     */
     template<typename T>
     class CellComplex {
     private:
         std::map<int, size_t> m_cell_counts;
-        std::map<int, IncidenceMatrix<T>> m_boundary_maps; // Optimized for d_p: C_p -> C_{p-1}
-        std::map<DimensionPair, IncidenceMatrix<T>> m_general_incidence_maps; // For all other d_{i,j}
+        std::map<int, IncidenceMatrix<T>> m_boundary_maps;
+        std::map<DimensionPair, IncidenceMatrix<T>> m_general_incidence_maps;
 
     public:
-        void setCellCount(int dim, size_t count) {
-            m_cell_counts[dim] = count;
-        }
+        void setCellCount(int dim, size_t count) { m_cell_counts[dim] = count; }
 
         void setBoundaryOperator(int source_dim, IncidenceMatrix<T>&& map) {
             m_boundary_maps[source_dim] = std::move(map);
@@ -117,79 +153,73 @@ namespace atopo {
             int low_dim = std::min(from_dim, to_dim);
             int high_dim = std::max(from_dim, to_dim);
             DimensionPair key = {low_dim, high_dim};
-
-            if (from_dim < to_dim) {
-                m_general_incidence_maps[key] = std::move(map);
-            } else {
-                // Store the transpose to match the canonical key order
-                m_general_incidence_maps[key] = map.transpose();
-            }
+            if (from_dim < to_dim) { m_general_incidence_maps[key] = std::move(map); } 
+            else { m_general_incidence_maps[key] = map.transpose(); }
         }
 
         [[nodiscard]] size_t getNumberOfCells(int dim) const {
             auto it = m_cell_counts.find(dim);
-            if (it == m_cell_counts.end()) {
-                return 0;
-            }
-            return it->second;
+            return (it == m_cell_counts.end()) ? 0 : it->second;
         }
         
         [[nodiscard]] IncidenceMatrix<T> getIncidenceMap(int from_dim, int to_dim) const {
-            // Case 1: Standard boundary operator (p -> p-1)
             if (to_dim == from_dim - 1) {
                 auto it = m_boundary_maps.find(from_dim);
                 if (it != m_boundary_maps.end()) return it->second;
             }
-            
-            // Case 2: Standard coboundary operator (p -> p+1)
             if (to_dim == from_dim + 1) {
-                auto it = m_boundary_maps.find(to_dim); // Coboundary is transpose of next boundary
+                auto it = m_boundary_maps.find(to_dim);
                 if (it != m_boundary_maps.end()) return it->second.transpose();
             }
-
-            // Case 3: General incidence, using canonical key
             int low_dim = std::min(from_dim, to_dim);
             int high_dim = std::max(from_dim, to_dim);
             DimensionPair key = {low_dim, high_dim};
-
             auto it = m_general_incidence_maps.find(key);
             if (it == m_general_incidence_maps.end()) {
-                 // Return empty matrix if no map exists
                  return IncidenceMatrix<T>(getNumberOfCells(to_dim), getNumberOfCells(from_dim));
             }
-            
-            if (from_dim < to_dim) {
-                return it->second; // Stored in correct order
-            } else {
-                return it->second.transpose(); // Stored in reverse order
+            return (from_dim < to_dim) ? it->second : it->second.transpose();
+        }
+
+        /**
+         * @brief Computes the Betti numbers for the cell complex.
+         */
+        [[nodiscard]] std::map<int, int> computeBettiNumbers() const {
+            std::map<int, int> betti_numbers;
+            int max_dim = 0;
+            if(!m_cell_counts.empty()) {
+                max_dim = m_cell_counts.rbegin()->first;
             }
+
+            for (int p = 0; p <= max_dim; ++p) {
+                long rank_Cp = getNumberOfCells(p);
+                long rank_dp = (p > 0) ? detail::snf_rank(getIncidenceMap(p, p - 1)) : 0;
+                long rank_dp1 = detail::snf_rank(getIncidenceMap(p + 1, p));
+                
+                int betti_p = rank_Cp - rank_dp - rank_dp1;
+                if (betti_p != 0 || rank_Cp > 0) {
+                    betti_numbers[p] = betti_p;
+                }
+            }
+            return betti_numbers;
         }
     };
 
-    /**
-     * @brief Computes the boundary (∂) of a p-chain.
-     */
     template<typename T>
     [[nodiscard]] Chain<T> boundary(const CellComplex<T>& complex, const Chain<T>& chain) {
-        if (chain.dimension == 0) return Chain<T>(-1, Eigen::SparseVector<T>());
-
+        if (chain.dimension <= 0) return Chain<T>(-1, Eigen::SparseVector<T>());
         const IncidenceMatrix<T>& d_p = complex.getIncidenceMap(chain.dimension, chain.dimension - 1);
         Eigen::SparseVector<T> boundary_vector = d_p * chain.data;
         boundary_vector.prune(0, 0);
-        
         return Chain<T>(chain.dimension - 1, std::move(boundary_vector));
     }
 
-    /**
-     * @brief Computes the coboundary (δ) of a p-cochain.
-     */
     template<typename T>
     [[nodiscard]] Cochain<T> coboundary(const CellComplex<T>& complex, const Cochain<T>& cochain) {
         int p = cochain.dimension;
-        const IncidenceMatrix<T>& d_p_plus_1 = complex.getIncidenceMap(p + 1, p);
-        Eigen::SparseVector<T> coboundary_vector = d_p_plus_1.transpose() * cochain.data;
+        const IncidenceMatrix<T> delta_p = complex.getIncidenceMap(p, p + 1);
+        Eigen::SparseVector<T> coboundary_vector = delta_p * cochain.data;
         coboundary_vector.prune(0, 0);
-        
         return Cochain<T>(p + 1, std::move(coboundary_vector));
     }
 
@@ -201,12 +231,15 @@ namespace atopo {
 } // namespace atopo
 
 
-// --- USER'S LEGACY CODE ---
-struct LegacyVertex { size_t id; };
-struct LegacyEdge { size_t id; size_t v_start, v_end; };
-struct LegacyFace { size_t id; std::vector<size_t> edge_loop; };
-struct LegacyMesh { /* ... */ };
-// NOTE: Unchanged user code structs are omitted for brevity but included in the script.
+// --- EXAMPLE: USER'S LEGACY CODE ---
+struct MyPoint3D { double x, y, z; };
+struct MyCurve   { /* e.g., NURBS curve data */ };
+struct MySurface { /* e.g., NURBS surface data */ };
+
+struct LegacyVertex { size_t id; MyPoint3D geometry; };
+struct LegacyEdge   { size_t id; size_t v_start, v_end; MyCurve geometry; };
+struct LegacyFace   { size_t id; std::vector<size_t> edge_loop; MySurface geometry; };
+
 struct LegacyMesh {
     std::vector<LegacyVertex> vertices;
     std::vector<LegacyEdge> edges;
@@ -214,12 +247,23 @@ struct LegacyMesh {
 };
 
 
-// --- GLUE CODE ---
+// --- EXAMPLE: GLUE CODE ---
 namespace atopo {
-    template<> struct CellTraits<LegacyVertex> { static constexpr int dimension = 0; };
-    template<> struct CellTraits<LegacyEdge> { static constexpr int dimension = 1; };
-    template<> struct CellTraits<LegacyFace> { static constexpr int dimension = 2; };
-
+    template<> struct CellTraits<LegacyVertex> {
+        static constexpr int dimension = 0;
+        using GeometryType = MyPoint3D;
+        static GeometryType get_geometry(const LegacyVertex& cell) { return cell.geometry; }
+    };
+    template<> struct CellTraits<LegacyEdge> {
+        static constexpr int dimension = 1;
+        using GeometryType = MyCurve;
+        static GeometryType get_geometry(const LegacyEdge& cell) { return cell.geometry; }
+    };
+    template<> struct CellTraits<LegacyFace> {
+        static constexpr int dimension = 2;
+        using GeometryType = MySurface;
+        static GeometryType get_geometry(const LegacyFace& cell) { return cell.geometry; }
+    };
     template<> struct TopologySourceTraits<LegacyMesh> {
         template<typename T>
         static CellComplex<T> build(const LegacyMesh& mesh) {
@@ -228,7 +272,6 @@ namespace atopo {
             complex.setCellCount(1, mesh.edges.size());
             complex.setCellCount(2, mesh.faces.size());
 
-            // Boundary d_1: C_1 -> C_0
             IncidenceMatrix<T> d1(mesh.vertices.size(), mesh.edges.size());
             for (const auto& edge : mesh.edges) {
                 d1.insert(edge.v_start, edge.id) = -1;
@@ -236,11 +279,9 @@ namespace atopo {
             }
             complex.setBoundaryOperator(1, std::move(d1));
 
-            // Boundary d_2: C_2 -> C_1
             IncidenceMatrix<T> d2(mesh.edges.size(), mesh.faces.size());
             for (const auto& face : mesh.faces) {
                 for (size_t edge_id : face.edge_loop) {
-                    // This is a simplification; correct orientation requires more info
                     d2.insert(edge_id, face.id) = 1; 
                 }
             }
@@ -251,11 +292,135 @@ namespace atopo {
     };
 } // namespace atopo
 
-#endif // AT_OPO_H
+#endif // ATOPO_H
 EOF
-
-echo "✅ 'inc/atopo.h' has been successfully upgraded."
+echo "✅ 'inc/atopo.h' updated."
 echo ""
-echo "You can now rebuild your project with the new architecture:"
+
+# --- Step 2: Update the CMakeLists.txt to include the new test file ---
+echo "2. Updating 'CMakeLists.txt' to add new test file..."
+cat << 'EOF' > CMakeLists.txt
+# CMake configuration for the Algebraic Topology Framework
+cmake_minimum_required(VERSION 3.10)
+project(AlgebraicTopologyFramework LANGUAGES CXX)
+
+# Set build type to Debug to include debugging symbols
+set(CMAKE_BUILD_TYPE Debug)
+
+# Set the C++ standard to 17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# --- Find Dependencies ---
+find_package(Eigen3 REQUIRED)
+find_package(GTest REQUIRED)
+
+# --- Testing Setup with Google Test ---
+enable_testing()
+
+# Add the test executable
+add_executable(atopo_tests
+    test/test_atopo.cpp
+    test/test_homology.cpp
+)
+
+# Add include paths for the test target
+target_include_directories(atopo_tests PRIVATE
+    inc
+    ${EIGEN3_INCLUDE_DIR}
+)
+
+# Link the test executable against GTest and Eigen
+target_link_libraries(atopo_tests PRIVATE
+    GTest::GTest
+    GTest::Main
+    Eigen3::Eigen
+)
+
+# Automatically discover all tests in the executable
+include(GoogleTest)
+gtest_discover_tests(atopo_tests)
+
+
+# --- Build Information ---
+message(STATUS "Project Name: ${PROJECT_NAME}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Found Eigen3: ${EIGEN3_INCLUDE_DIR}")
+message(STATUS "Found GTest: ${GTEST_INCLUDE_DIRS}")
+EOF
+echo "✅ 'CMakeLists.txt' updated."
+echo ""
+
+# --- Step 3: Create the new homology test file ---
+echo "3. Creating 'test/test_homology.cpp'..."
+cat << 'EOF' > test/test_homology.cpp
+#include <gtest/gtest.h>
+#include "atopo.h"
+
+// Test fixture for creating complexes from user-defined mesh data
+class HomologyTest : public ::testing::Test {
+protected:
+    using Coeff = int;
+    
+    // Helper to build and test a complex
+    void RunTest(const LegacyMesh& mesh, const std::map<int, int>& expected_betti) {
+        auto complex = atopo::create_complex_from_source<Coeff>(mesh);
+        auto betti_numbers = complex.computeBettiNumbers();
+
+        // Check that all expected Betti numbers are present and correct
+        for(const auto& pair : expected_betti) {
+            ASSERT_TRUE(betti_numbers.count(pair.first)) << "Betti number for dimension " << pair.first << " is missing.";
+            EXPECT_EQ(betti_numbers.at(pair.first), pair.second) << "Betti number for dimension " << pair.first << " is incorrect.";
+        }
+        
+        // Check that no unexpected Betti numbers are present
+        for(const auto& pair : betti_numbers) {
+            if(pair.second != 0) { // Only check for non-zero unexpected values
+                 ASSERT_TRUE(expected_betti.count(pair.first)) << "Unexpected non-zero Betti number at dimension " << pair.first;
+            }
+        }
+    }
+};
+
+TEST_F(HomologyTest, SingleEdge) {
+    LegacyMesh mesh;
+    mesh.vertices = {{0, {}}, {1, {}}};
+    mesh.edges = {{0, 0, 1, {}}};
+    // Expected: 1 connected component (β₀=1), 0 loops (β₁=0)
+    RunTest(mesh, {{0, 1}, {1, 0}});
+}
+
+TEST_F(HomologyTest, TwoDisconnectedEdges) {
+    LegacyMesh mesh;
+    mesh.vertices = {{0, {}}, {1, {}}, {2, {}}, {3, {}}};
+    mesh.edges = {{0, 0, 1, {}}, {1, 2, 3, {}}};
+    // Expected: 2 connected components (β₀=2), 0 loops (β₁=0)
+    RunTest(mesh, {{0, 2}, {1, 0}});
+}
+
+TEST_F(HomologyTest, CircleLoop) {
+    LegacyMesh mesh;
+    mesh.vertices = {{0, {}}, {1, {}}, {2, {}}};
+    mesh.edges = {{0, 0, 1, {}}, {1, 1, 2, {}}, {2, 2, 0, {}}};
+    // Expected: 1 connected component (β₀=1), 1 loop (β₁=1)
+    RunTest(mesh, {{0, 1}, {1, 1}});
+}
+
+TEST_F(HomologyTest, Sphere) {
+    // A sphere represented as a tetrahedron
+    LegacyMesh mesh;
+    mesh.vertices = {{0,{}}, {1,{}}, {2,{}}, {3,{}}};
+    mesh.edges = {{0,0,1,{}}, {1,0,2,{}}, {2,0,3,{}}, {3,1,2,{}}, {4,1,3,{}}, {5,2,3,{}}};
+    mesh.faces = {{0, {0, 3, 1}, {}}, {1, {0, 2, 4}, {}}, {2, {1, 3, 5}, {}}, {3, {2, 5, 4}, {}}};
+    // Expected: 1 component (β₀=1), 0 loops (β₁=0), 1 void (β₂=1)
+    RunTest(mesh, {{0, 1}, {1, 0}, {2, 1}});
+}
+EOF
+echo "✅ 'test/test_homology.cpp' created."
+echo "-----------------------------------"
+echo "🚀 Project upgrade to Tier 1 is complete!"
+echo "You can now rebuild and run all tests:"
 echo "  cmake -B build"
 echo "  cmake --build build"
+echo "  ctest --test-dir build --verbose"

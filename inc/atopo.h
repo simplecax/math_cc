@@ -9,18 +9,15 @@
 #include <map>
 #include <utility>
 #include <algorithm>
+#include <numeric> // For std::gcd
 
 // Eigen is a header-only library for linear algebra, used for our sparse matrix and vector operations.
 #include <Eigen/Sparse>
+#include <Eigen/Dense> // Required for SNF computation
 
 /**
  * @file atopo.h
  * @brief A single-header, trait-based C++ framework for algebraic topology.
- *
- * This file provides a set of tools to represent and manipulate topological spaces
- * (cell complexes) using the principles of algebraic topology. It is designed to be
- * generic and adaptable to existing user-defined geometry and mesh data structures
- * through a trait-based specialization system.
  */
 
 /**
@@ -41,33 +38,74 @@ namespace atopo {
 
     /**
      * @brief Trait class to adapt a user-defined type to be a "cell".
-     * @details The user must specialize this template for their own geometry types.
-     * The specialization must provide the cell's dimension, its associated geometry
-     * C++ type, and a static function to access that geometry.
      */
     template<typename CellType>
     struct CellTraits {
-        // The dimension of the cell (e.g., 0 for a vertex, 1 for an edge).
-        static constexpr int dimension = -1; 
-
-        // The C++ type of the associated geometric entity (e.g., Point3D, NurbsCurve).
+        static constexpr int dimension = -1;
         using GeometryType = void;
-
-        // A static function to retrieve the geometric entity from a cell instance.
         static GeometryType get_geometry(const CellType& cell);
     };
 
     /**
-     * @brief Trait class to adapt a user's data source (e.g., a mesh) to build a CellComplex.
-     * @details The user must specialize this template for their own mesh or topology data structure.
-     * The specialization must provide a static `build` function that constructs and returns a
-     * `CellComplex` from the user's data source.
+     * @brief Trait class to adapt a user's data source to build a CellComplex.
      */
     template<typename TopologySource>
-    struct TopologySourceTraits { /* User specializes: static CellComplex<T> build(const Source&); */ };
+    struct TopologySourceTraits { /* User specializes */ };
 
 
-    // --- CORE FRAMEWORK CLASSES & FUNCTIONS --- (Unchanged from previous version)
+    // --- Implementation Detail for Homology ---
+    namespace detail {
+        /**
+         * @brief A basic implementation of Smith Normal Form (SNF) to find matrix rank.
+         */
+        inline int snf_rank(const atopo::IncidenceMatrix<int>& sparse_mat) {
+            if (sparse_mat.nonZeros() == 0) return 0;
+
+            Eigen::MatrixXi mat = sparse_mat; // Convert to dense for manipulation
+            int rows = mat.rows();
+            int cols = mat.cols();
+            int rank = 0;
+            int pivot_row = 0;
+
+            for (int pivot_col = 0; pivot_col < cols && pivot_row < rows; ++pivot_col) {
+                // Find a non-zero pivot in the current column
+                int i = pivot_row;
+                while (i < rows && mat(i, pivot_col) == 0) {
+                    i++;
+                }
+
+                if (i < rows) { // Found a pivot
+                    mat.row(pivot_row).swap(mat.row(i)); // Move pivot to current row
+                    
+                    // Use row operations to make the pivot the GCD of its column
+                    for(int j = pivot_row + 1; j < rows; ++j) {
+                        while(mat(j, pivot_col) != 0) {
+                             int q = mat(pivot_row, pivot_col) / mat(j, pivot_col);
+                             mat.row(pivot_row) -= q * mat.row(j);
+                             mat.row(pivot_row).swap(mat.row(j));
+                        }
+                    }
+
+                    // Zero out the rest of the column below the pivot
+                    for (int j = pivot_row + 1; j < rows; ++j) {
+                       if (mat(j, pivot_col) != 0) {
+                           int factor = mat(j, pivot_col) / mat(pivot_row, pivot_col);
+                           mat.row(j) -= factor * mat.row(pivot_row);
+                       }
+                    }
+                    
+                    if (mat(pivot_row, pivot_col) != 0) {
+                        rank++;
+                        pivot_row++;
+                    }
+                }
+            }
+            return rank;
+        }
+    } // namespace detail
+
+
+    // --- CORE FRAMEWORK CLASSES & FUNCTIONS ---
 
     template<typename T>
     struct ChainBase {
@@ -128,6 +166,29 @@ namespace atopo {
             }
             return (from_dim < to_dim) ? it->second : it->second.transpose();
         }
+
+        /**
+         * @brief Computes the Betti numbers for the cell complex.
+         */
+        [[nodiscard]] std::map<int, int> computeBettiNumbers() const {
+            std::map<int, int> betti_numbers;
+            int max_dim = 0;
+            if(!m_cell_counts.empty()) {
+                max_dim = m_cell_counts.rbegin()->first;
+            }
+
+            for (int p = 0; p <= max_dim; ++p) {
+                long rank_Cp = getNumberOfCells(p);
+                long rank_dp = (p > 0) ? detail::snf_rank(getIncidenceMap(p, p - 1)) : 0;
+                long rank_dp1 = detail::snf_rank(getIncidenceMap(p + 1, p));
+                
+                int betti_p = rank_Cp - rank_dp - rank_dp1;
+                if (betti_p != 0 || rank_Cp > 0) {
+                    betti_numbers[p] = betti_p;
+                }
+            }
+            return betti_numbers;
+        }
     };
 
     template<typename T>
@@ -157,10 +218,6 @@ namespace atopo {
 
 
 // --- EXAMPLE: USER'S LEGACY CODE ---
-// This section demonstrates how a user's geometry types might be defined.
-// Note they now include associated geometry (e.g., MyPoint3D).
-
-// Dummy geometry types for the example
 struct MyPoint3D { double x, y, z; };
 struct MyCurve   { /* e.g., NURBS curve data */ };
 struct MySurface { /* e.g., NURBS surface data */ };
@@ -177,11 +234,7 @@ struct LegacyMesh {
 
 
 // --- EXAMPLE: GLUE CODE ---
-// This section shows how the user "glues" their legacy code to the `atopo` framework.
-// Note how the CellTraits specialization now provides all three required pieces of information.
-
 namespace atopo {
-
     template<> struct CellTraits<LegacyVertex> {
         static constexpr int dimension = 0;
         using GeometryType = MyPoint3D;
@@ -197,8 +250,6 @@ namespace atopo {
         using GeometryType = MySurface;
         static GeometryType get_geometry(const LegacyFace& cell) { return cell.geometry; }
     };
-
-    // The TopologySourceTraits specialization remains the same, as it only deals with topology.
     template<> struct TopologySourceTraits<LegacyMesh> {
         template<typename T>
         static CellComplex<T> build(const LegacyMesh& mesh) {

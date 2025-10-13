@@ -20,6 +20,7 @@ enable_testing()
 # Add the test executable
 add_executable(atopo_tests
     test/test_atopo.cpp
+    test/test_homology.cpp
 )
 
 # Add include paths for the test target
