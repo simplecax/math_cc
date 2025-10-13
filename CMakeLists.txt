@@ -11,29 +11,37 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # --- Find Dependencies ---
-# Your code uses Eigen for sparse matrices.
 find_package(Eigen3 REQUIRED)
+find_package(GTest REQUIRED)
 
-# --- Define Executable Target ---
-# Create an executable named 'atopo_app' from the source file in src/
-add_executable(atopo_app src/main.cpp)
+# --- Testing Setup with Google Test ---
+enable_testing()
 
-# --- Configure Target ---
-# Add our 'inc' directory to the include path so #include "atopo.h" works.
-# Also add the Eigen include directory.
-target_include_directories(atopo_app PRIVATE
-    inc
-    \${EIGEN3_INCLUDE_DIR}
+# Add the test executable
+add_executable(atopo_tests
+    test/test_atopo.cpp
 )
 
-# Link the executable against Eigen.
-# For header-only libraries, this is the modern CMake way to propagate
-# usage requirements (like include paths) to the target.
-target_link_libraries(atopo_app PRIVATE Eigen3::Eigen)
+# Add include paths for the test target
+target_include_directories(atopo_tests PRIVATE
+    inc
+    ${EIGEN3_INCLUDE_DIR}
+)
+
+# Link the test executable against GTest and Eigen
+target_link_libraries(atopo_tests PRIVATE
+    GTest::GTest
+    GTest::Main
+    Eigen3::Eigen
+)
+
+# Automatically discover all tests in the executable
+include(GoogleTest)
+gtest_discover_tests(atopo_tests)
 
 
 # --- Build Information ---
-message(STATUS "Project Name: \${PROJECT_NAME}")
-message(STATUS "C++ Standard: \${CMAKE_CXX_STANDARD}")
-message(STATUS "Build Type: \${CMAKE_BUILD_TYPE}")
-message(STATUS "Found Eigen3: \${EIGEN3_INCLUDE_DIR}")
+message(STATUS "Project Name: ${PROJECT_NAME}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Found Eigen3: ${EIGEN3_INCLUDE_DIR}")
+message(STATUS "Found GTest: ${GTEST_INCLUDE_DIRS}")
