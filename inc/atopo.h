@@ -29,9 +29,12 @@ namespace atopo {
     // --- Core Data Types ---
     template<typename T>
     using Coefficient = T;
-    template<typename T>
-    using IncidenceMatrix = Eigen::SparseMatrix<Coefficient<T>>;
+    
     using DimensionPair = std::pair<int, int>;
+    using IncidenceCoeff = signed short; // Fixed type for incidence matrices
+
+    template<typename T>
+    using IncidenceMatrix = Eigen::SparseMatrix<T>;
 
 
     // --- TRAITS (Compile-Time Polymorphism via Specialization) ---
@@ -57,11 +60,12 @@ namespace atopo {
     namespace detail {
         /**
          * @brief A basic implementation of Smith Normal Form (SNF) to find matrix rank.
+         * NOTE: This now takes the correct fixed matrix type.
          */
-        inline int snf_rank(const atopo::IncidenceMatrix<int>& sparse_mat) {
+        inline int snf_rank(const atopo::IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
             if (sparse_mat.nonZeros() == 0) return 0;
 
-            Eigen::MatrixXi mat = sparse_mat; // Convert to dense for manipulation
+            Eigen::MatrixXi mat = sparse_mat.template cast<int>(); // Convert to dense for manipulation
             int rows = mat.rows();
             int cols = mat.cols();
             int rank = 0;
@@ -121,21 +125,21 @@ namespace atopo {
     template<typename T>
     struct Cochain : public ChainBase<T> { using ChainBase<T>::ChainBase; };
 
-    template<typename T>
+    // CellComplex is now a concrete (non-template) class
     class CellComplex {
     private:
         std::map<int, size_t> m_cell_counts;
-        std::map<int, IncidenceMatrix<T>> m_boundary_maps;
-        std::map<DimensionPair, IncidenceMatrix<T>> m_general_incidence_maps;
+        std::map<int, IncidenceMatrix<IncidenceCoeff>> m_boundary_maps;
+        std::map<DimensionPair, IncidenceMatrix<IncidenceCoeff>> m_general_incidence_maps;
 
     public:
         void setCellCount(int dim, size_t count) { m_cell_counts[dim] = count; }
 
-        void setBoundaryOperator(int source_dim, IncidenceMatrix<T>&& map) {
+        void setBoundaryOperator(int source_dim, IncidenceMatrix<IncidenceCoeff>&& map) {
             m_boundary_maps[source_dim] = std::move(map);
         }
 
-        void setGeneralIncidenceMap(int from_dim, int to_dim, IncidenceMatrix<T>&& map) {
+        void setGeneralIncidenceMap(int from_dim, int to_dim, IncidenceMatrix<IncidenceCoeff>&& map) {
             int low_dim = std::min(from_dim, to_dim);
             int high_dim = std::max(from_dim, to_dim);
             DimensionPair key = {low_dim, high_dim};
@@ -148,7 +152,7 @@ namespace atopo {
             return (it == m_cell_counts.end()) ? 0 : it->second;
         }
         
-        [[nodiscard]] IncidenceMatrix<T> getIncidenceMap(int from_dim, int to_dim) const {
+        [[nodiscard]] IncidenceMatrix<IncidenceCoeff> getIncidenceMap(int from_dim, int to_dim) const {
             if (to_dim == from_dim - 1) {
                 auto it = m_boundary_maps.find(from_dim);
                 if (it != m_boundary_maps.end()) return it->second;
@@ -162,7 +166,7 @@ namespace atopo {
             DimensionPair key = {low_dim, high_dim};
             auto it = m_general_incidence_maps.find(key);
             if (it == m_general_incidence_maps.end()) {
-                 return IncidenceMatrix<T>(getNumberOfCells(to_dim), getNumberOfCells(from_dim));
+                 return IncidenceMatrix<IncidenceCoeff>(getNumberOfCells(to_dim), getNumberOfCells(from_dim));
             }
             return (from_dim < to_dim) ? it->second : it->second.transpose();
         }
@@ -192,26 +196,27 @@ namespace atopo {
     };
 
     template<typename T>
-    [[nodiscard]] Chain<T> boundary(const CellComplex<T>& complex, const Chain<T>& chain) {
+    [[nodiscard]] Chain<T> boundary(const CellComplex& complex, const Chain<T>& chain) {
         if (chain.dimension <= 0) return Chain<T>(-1, Eigen::SparseVector<T>());
-        const IncidenceMatrix<T>& d_p = complex.getIncidenceMap(chain.dimension, chain.dimension - 1);
-        Eigen::SparseVector<T> boundary_vector = d_p * chain.data;
+        const IncidenceMatrix<IncidenceCoeff>& d_p = complex.getIncidenceMap(chain.dimension, chain.dimension - 1);
+        Eigen::SparseVector<T> boundary_vector = d_p.template cast<T>() * chain.data;
         boundary_vector.prune(0, 0);
         return Chain<T>(chain.dimension - 1, std::move(boundary_vector));
     }
 
     template<typename T>
-    [[nodiscard]] Cochain<T> coboundary(const CellComplex<T>& complex, const Cochain<T>& cochain) {
+    [[nodiscard]] Cochain<T> coboundary(const CellComplex& complex, const Cochain<T>& cochain) {
         int p = cochain.dimension;
-        const IncidenceMatrix<T> delta_p = complex.getIncidenceMap(p, p + 1);
-        Eigen::SparseVector<T> coboundary_vector = delta_p * cochain.data;
+        // The coboundary map is the transpose of the boundary map d_{p+1}
+        const IncidenceMatrix<IncidenceCoeff> delta_p = complex.getIncidenceMap(p + 1, p).transpose();
+        Eigen::SparseVector<T> coboundary_vector = delta_p.template cast<T>() * cochain.data;
         coboundary_vector.prune(0, 0);
         return Cochain<T>(p + 1, std::move(coboundary_vector));
     }
 
-    template<typename T, typename TopologySource>
-    [[nodiscard]] CellComplex<T> create_complex_from_source(const TopologySource& source) {
-        return TopologySourceTraits<TopologySource>::template build<T>(source);
+    template<typename TopologySource>
+    [[nodiscard]] CellComplex create_complex_from_source(const TopologySource& source) {
+        return TopologySourceTraits<TopologySource>::build(source);
     }
 
 } // namespace atopo
@@ -251,21 +256,21 @@ namespace atopo {
         static GeometryType get_geometry(const LegacyFace& cell) { return cell.geometry; }
     };
     template<> struct TopologySourceTraits<LegacyMesh> {
-        template<typename T>
-        static CellComplex<T> build(const LegacyMesh& mesh) {
-            CellComplex<T> complex;
+        // This build function is no longer a template
+        static CellComplex build(const LegacyMesh& mesh) {
+            CellComplex complex;
             complex.setCellCount(0, mesh.vertices.size());
             complex.setCellCount(1, mesh.edges.size());
             complex.setCellCount(2, mesh.faces.size());
 
-            IncidenceMatrix<T> d1(mesh.vertices.size(), mesh.edges.size());
+            IncidenceMatrix<IncidenceCoeff> d1(mesh.vertices.size(), mesh.edges.size());
             for (const auto& edge : mesh.edges) {
                 d1.insert(edge.v_start, edge.id) = -1;
                 d1.insert(edge.v_end,   edge.id) = 1;
             }
             complex.setBoundaryOperator(1, std::move(d1));
 
-            IncidenceMatrix<T> d2(mesh.edges.size(), mesh.faces.size());
+            IncidenceMatrix<IncidenceCoeff> d2(mesh.edges.size(), mesh.faces.size());
             for (const auto& face : mesh.faces) {
                 for (size_t edge_id : face.edge_loop) {
                     d2.insert(edge_id, face.id) = 1; 

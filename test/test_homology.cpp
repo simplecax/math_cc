@@ -8,7 +8,7 @@ protected:
     
     // Helper to build and test a complex
     void RunTest(const LegacyMesh& mesh, const std::map<int, int>& expected_betti) {
-        auto complex = atopo::create_complex_from_source<Coeff>(mesh);
+        auto complex = atopo::create_complex_from_source(mesh);
         auto betti_numbers = complex.computeBettiNumbers();
 
         // Check that all expected Betti numbers are present and correct

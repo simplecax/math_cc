@@ -19,11 +19,11 @@ protected:
         };
 
         // 2. Build the CellComplex from the mesh
-        complex = atopo::create_complex_from_source<int>(my_mesh);
+        complex = atopo::create_complex_from_source(my_mesh);
     }
 
     LegacyMesh my_mesh;
-    atopo::CellComplex<int> complex;
+    atopo::CellComplex complex;
     using Coeff = int;
 };
 
