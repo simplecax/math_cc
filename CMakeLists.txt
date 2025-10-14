@@ -14,6 +14,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Eigen3 REQUIRED)
 find_package(GTest REQUIRED)
 
+# --- Library Target ---
+# Define a header-only INTERFACE library for our framework.
+# This makes it reusable and clearly defines its usage requirements.
+add_library(atopo INTERFACE)
+
+# The only public usage requirement for atopo is its include directory.
+target_include_directories(atopo INTERFACE
+    inc
+)
+
+# The atopo library itself needs Eigen3.
+target_link_libraries(atopo INTERFACE
+    Eigen3::Eigen
+)
+
 # --- Testing Setup with Google Test ---
 enable_testing()
 
@@ -23,17 +38,11 @@ add_executable(atopo_tests
     test/test_homology.cpp
 )
 
-# Add include paths for the test target
-target_include_directories(atopo_tests PRIVATE
-    inc
-    ${EIGEN3_INCLUDE_DIR}
-)
-
-# Link the test executable against GTest and Eigen
+# Link the test executable against our atopo library and GTest.
+# It will inherit the include paths and Eigen dependency from atopo.
 target_link_libraries(atopo_tests PRIVATE
-    GTest::GTest
+    atopo
     GTest::Main
-    Eigen3::Eigen
 )
 
 # Automatically discover all tests in the executable

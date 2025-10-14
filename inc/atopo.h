@@ -272,8 +272,45 @@ namespace atopo {
 
             IncidenceMatrix<IncidenceCoeff> d2(mesh.edges.size(), mesh.faces.size());
             for (const auto& face : mesh.faces) {
+                if (face.edge_loop.empty()) continue;
+
+                // --- CORRECT ORIENTATION LOGIC ---
+                // First, build the ordered vertex loop from the ordered edge loop.
+                // This is crucial for determining the traversal direction.
+                std::vector<size_t> vertex_loop;
+                const auto& first_edge = mesh.edges.at(face.edge_loop.front());
+                vertex_loop.push_back(first_edge.v_start);
+                size_t last_vertex = first_edge.v_start;
+
                 for (size_t edge_id : face.edge_loop) {
-                    d2.insert(edge_id, face.id) = 1; 
+                    const auto& edge = mesh.edges.at(edge_id);
+                    if (edge.v_start == last_vertex) {
+                        last_vertex = edge.v_end;
+                    } else {
+                        // Assume v_end must be the last_vertex, so the next is v_start
+                        last_vertex = edge.v_start;
+                    }
+                    // Don't add the final vertex if it closes the loop back to the start
+                    if (last_vertex != vertex_loop.front()) {
+                        vertex_loop.push_back(last_vertex);
+                    }
+                }
+
+                // Second, calculate the orientation for each edge based on the traversal.
+                for (size_t i = 0; i < face.edge_loop.size(); ++i) {
+                    size_t edge_id = face.edge_loop[i];
+                    const auto& edge = mesh.edges.at(edge_id);
+
+                    size_t v_start_of_traversal = vertex_loop[i];
+                    size_t v_end_of_traversal = vertex_loop[(i + 1) % vertex_loop.size()];
+                    
+                    IncidenceCoeff orientation = 0;
+                    if (edge.v_start == v_start_of_traversal && edge.v_end == v_end_of_traversal) {
+                        orientation = 1;  // Edge direction agrees with loop traversal
+                    } else {
+                        orientation = -1; // Edge direction opposes loop traversal
+                    }
+                    d2.insert(edge_id, face.id) = orientation;
                 }
             }
             complex.setBoundaryOperator(2, std::move(d2));

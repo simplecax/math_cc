@@ -54,8 +54,19 @@ TEST_F(HomologyTest, Sphere) {
     // A sphere represented as a tetrahedron
     LegacyMesh mesh;
     mesh.vertices = {{0,{}}, {1,{}}, {2,{}}, {3,{}}};
-    mesh.edges = {{0,0,1,{}}, {1,0,2,{}}, {2,0,3,{}}, {3,1,2,{}}, {4,1,3,{}}, {5,2,3,{}}};
-    mesh.faces = {{0, {0, 3, 1}, {}}, {1, {0, 2, 4}, {}}, {2, {1, 3, 5}, {}}, {3, {2, 5, 4}, {}}};
+    // Edges of a complete graph K4
+    mesh.edges = {
+        {0,0,1,{}}, {1,0,2,{}}, {2,0,3,{}},
+        {3,1,2,{}}, {4,1,3,{}}, {5,2,3,{}}
+    };
+    // --- CORRECTED FACE DEFINITIONS ---
+    // The four valid triangular faces of the tetrahedron
+    mesh.faces = {
+        {0, {0, 3, 1}, {}}, // Face on vertices {0,1,2}
+        {1, {0, 4, 2}, {}}, // Face on vertices {0,1,3}
+        {2, {1, 5, 2}, {}}, // Face on vertices {0,2,3}
+        {3, {3, 5, 4}, {}}  // Face on vertices {1,2,3}
+    };
     // Expected: 1 component (β₀=1), 0 loops (β₁=0), 1 void (β₂=1)
     RunTest(mesh, {{0, 1}, {1, 0}, {2, 1}});
 }
