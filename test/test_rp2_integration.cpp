@@ -1,17 +1,3 @@
-#!/bin/bash
-#
-# This script applies the definitive fix to the RealProjectivePlane test case
-# by providing a correct, standard triangulation of the space, which will
-# resolve the final test failures.
-#
-# USAGE: ./final_fix.sh from the project root.
-
-set -e
-
-echo "🚀 Correcting the triangulation for the Real Projective Plane test..."
-
-# Overwrite the test file with the corrected mesh data.
-cat << 'EOF' > test/test_rp2_integration.cpp
 #include <gtest/gtest.h>
 #include "atopo.h"
 #include <vector>
@@ -101,8 +87,3 @@ TEST_F(RP2IntegrationTest, HomologyCalculation) {
         EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
     }
 }
-EOF
-
-echo "✅ Test data for RealProjectivePlane has been corrected."
-echo "   Please clean and rebuild. All tests should now pass."
-echo "   Run: rm -rf build && export PKG_CONFIG_PATH=/opt/lib/pkgconfig:\$PKG_CONFIG_PATH && cmake -S . -B build && cmake --build build && ctest --test-dir build"

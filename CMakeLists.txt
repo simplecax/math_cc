@@ -49,7 +49,7 @@ enable_testing()
 add_executable(atopo_tests
     test/test_atopo.cpp
     test/test_homology.cpp
-    test/test_torsion.cpp
+    test/test_rp2_integration.cpp
 )
 
 # Add the linker path for the custom /opt install

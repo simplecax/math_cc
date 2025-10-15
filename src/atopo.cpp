@@ -47,7 +47,7 @@ namespace atopo {
 
             HomologyGroup hg;
             hg.rank = rank_Cp - rank_dp - rank_dp1;
-            hg.torsion_coeffs = snf_dp1.torsion_coeffs;
+            hg.torsion_coeffs = snf_dp1.torsion_coeffs; // Torsion of Hp is from ∂(p+1)
             
             if (hg.rank != 0 || !hg.torsion_coeffs.empty() || rank_Cp > 0) {
                 homology[p] = hg;
@@ -77,31 +77,45 @@ namespace atopo {
     [[nodiscard]] CellComplex create_complex_from_source(const TopologySource& source) {
         return TopologySourceTraits<TopologySource>::build(source);
     }
+    
     CellComplex TopologySourceTraits<LegacyMesh>::build(const LegacyMesh& mesh) {
         CellComplex complex;
-        complex.setCellCount(0, mesh.vertices.size()); complex.setCellCount(1, mesh.edges.size()); complex.setCellCount(2, mesh.faces.size());
+        complex.setCellCount(0, mesh.vertices.size());
+        complex.setCellCount(1, mesh.edges.size());
+        complex.setCellCount(2, mesh.faces.size());
+        
         IncidenceMatrix<IncidenceCoeff> d1(mesh.vertices.size(), mesh.edges.size());
-        for (const auto& edge : mesh.edges) { d1.insert(edge.v_start, edge.id) = -1; d1.insert(edge.v_end, edge.id) = 1; }
+        for (const auto& edge : mesh.edges) {
+            d1.insert(edge.v_start, edge.id) = -1;
+            d1.insert(edge.v_end, edge.id) = 1;
+        }
         complex.setBoundaryOperator(1, std::move(d1));
+
         IncidenceMatrix<IncidenceCoeff> d2(mesh.edges.size(), mesh.faces.size());
         for (const auto& face : mesh.faces) {
-            if (face.edge_loop.empty()) continue;
-            std::vector<size_t> vertex_loop;
-            const auto& first_edge = mesh.edges.at(face.edge_loop.front());
-            vertex_loop.push_back(first_edge.v_start);
-            size_t last_vertex = first_edge.v_start;
+            if (face.edge_loop.size() < 2) continue;
+
+            // --- FINAL, CORRECT ORIENTATION LOGIC ---
+            const auto& e0 = mesh.edges.at(face.edge_loop[0]);
+            const auto& e1 = mesh.edges.at(face.edge_loop[1]);
+
+            // Find the common vertex between the first two edges to establish traversal order.
+            size_t v_start, v_mid, v_next;
+            if (e0.v_end == e1.v_start) { v_start = e0.v_start; v_mid = e0.v_end; v_next = e1.v_end; }
+            else if (e0.v_end == e1.v_end) { v_start = e0.v_start; v_mid = e0.v_end; v_next = e1.v_start; }
+            else if (e0.v_start == e1.v_start) { v_start = e0.v_end; v_mid = e0.v_start; v_next = e1.v_end; }
+            else { v_start = e0.v_end; v_mid = e0.v_start; v_next = e1.v_start; }
+            
+            size_t current_v = v_start;
             for (size_t edge_id : face.edge_loop) {
                 const auto& edge = mesh.edges.at(edge_id);
-                if (edge.v_start == last_vertex) { last_vertex = edge.v_end; } else { last_vertex = edge.v_start; }
-                if (last_vertex != vertex_loop.front()) { vertex_loop.push_back(last_vertex); }
-            }
-            for (size_t i = 0; i < face.edge_loop.size(); ++i) {
-                size_t edge_id = face.edge_loop[i];
-                const auto& edge = mesh.edges.at(edge_id);
-                size_t v_start_of_traversal = vertex_loop[i];
-                size_t v_end_of_traversal = vertex_loop[(i + 1) % vertex_loop.size()];
-                IncidenceCoeff orientation = (edge.v_start == v_start_of_traversal && edge.v_end == v_end_of_traversal) ? 1 : -1;
-                d2.insert(edge_id, face.id) = orientation;
+                if (edge.v_start == current_v) {
+                    d2.insert(edge.id, face.id) = 1; // Agrees with traversal
+                    current_v = edge.v_end;
+                } else {
+                    d2.insert(edge.id, face.id) = -1; // Opposes traversal
+                    current_v = edge.v_start;
+                }
             }
         }
         complex.setBoundaryOperator(2, std::move(d2));
