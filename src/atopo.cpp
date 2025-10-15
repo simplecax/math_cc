@@ -30,7 +30,7 @@ namespace atopo {
         if(!m_cell_counts.empty()) { max_dim = m_cell_counts.rbegin()->first; }
         for (int p = 0; p <= max_dim + 1; ++p) {
              if (getNumberOfCells(p) == 0 && getNumberOfCells(p-1) == 0 && p > max_dim) continue;
-            auto snf_dp = (p > 0) ? detail::compute_snf_results(getIncidenceMap(p, p - 1)) : detail::SNFResult{};
+            auto snf_dp = (p > 0) ? detail::compute_snf_results(getIncidenceMap(p, p - 1)) : atopo::HomologyGroup{};
             auto snf_dp1 = detail::compute_snf_results(getIncidenceMap(p + 1, p));
             long rank_Cp = getNumberOfCells(p);
             long rank_dp = snf_dp.rank;

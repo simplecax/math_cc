@@ -20,7 +20,7 @@ namespace atopo::detail {
      * @param sparse_mat The input sparse incidence matrix from Eigen.
      * @return A struct containing the rank and torsion coefficients.
      */
-    SNFResult compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
+    HomologyGroup compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
         if (sparse_mat.nonZeros() == 0) return {};
 
         using Integer = Givaro::Integer;
@@ -43,7 +43,7 @@ namespace atopo::detail {
         LinBox::smithForm(snf_result, A);
         
         // 4. Process the results.
-        SNFResult result;
+        HomologyGroup result;
         Integer zero(0);
         Integer one(1);
 

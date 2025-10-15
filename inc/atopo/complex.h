@@ -4,13 +4,13 @@
 #include <atopo/core.h>
 
 namespace atopo {
-    namespace detail {
-        struct SNFResult {
-            size_t rank = 0;
-            std::vector<long> torsion_coeffs;
-        };
-        SNFResult compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat);
+    HomologyGroup compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat);
     }
+
+namespace atopo { 
+    namespace detail { 
+        HomologyGroup compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat); 
+    } 
 
     class CellComplex {
     private:
