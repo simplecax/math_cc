@@ -1,108 +1,83 @@
 #!/bin/bash
 #
-# This script applies the definitive fix to the RealProjectivePlane test case
-# by providing a correct, standard triangulation of the space, which will
-# resolve the final test failures.
+# This script applies the definitive fix to the include order in
+# src/atopo_linbox.cpp to resolve the final compiler warning.
 #
-# USAGE: ./final_fix.sh from the project root.
+# USAGE: ./final_warning_fix.sh from the project root.
 
 set -e
 
-echo "🚀 Correcting the triangulation for the Real Projective Plane test..."
+echo "🚀 Correcting include order in src/atopo_linbox.cpp to resolve compiler warning..."
 
-# Overwrite the test file with the corrected mesh data.
-cat << 'EOF' > test/test_rp2_integration.cpp
-#include <gtest/gtest.h>
-#include "atopo.h"
-#include <vector>
-#include <algorithm>
-#include <numeric>
+# Overwrite the implementation file with the correct include order.
+cat << 'EOF' > src/atopo_linbox.cpp
+/**
+ * @file atopo_linbox.cpp
+ * @brief Isolates the LinBox dependency and implementation details.
+ */
 
-// Test fixture for the RP^2 triangulation integration tests.
-class RP2IntegrationTest : public ::testing::TestWithParam<int> {
-protected:
-    static void SetUpTestSuite() {
-        LegacyMesh mesh;
-        // The minimal triangulation of the Real Projective Plane (RP^2)
-        mesh.vertices = {{0,{}}, {1,{}}, {2,{}}, {3,{}}, {4,{}}, {5,{}}};
-        mesh.edges = {
-            {0,0,1,{}}, {1,0,2,{}}, {2,0,3,{}}, {3,0,4,{}}, {4,0,5,{}},  // Edges from v0
-            {5,1,2,{}}, {6,1,3,{}}, {7,1,4,{}}, {8,1,5,{}},              // Edges from v1
-            {9,2,3,{}}, {10,2,4,{}}, {11,2,5,{}},                        // Edges from v2
-            {12,3,4,{}}, {13,3,5,{}},                                    // Edges from v3
-            {14,4,5,{}}                                                 // Edge from v4
-        };
-        // --- CORRECTED FACE DEFINITIONS ---
-        // A standard, mathematically correct triangulation of RP^2
-        mesh.faces = {
-            {0, {0, 5, 1}},    // v0,v1,v2
-            {1, {1, 9, 2}},    // v0,v2,v3
-            {2, {2, 12, 3}},   // v0,v3,v4
-            {3, {3, 14, 4}},   // v0,v4,v5
-            {4, {4, 8, 0}},    // v0,v5,v1
-            {5, {5, 10, 7}},   // v1,v2,v4
-            {6, {6, 13, 8}},   // v1,v3,v5
-            {7, {9, 13, 11}},  // v2,v3,v5
-            {8, {11, 14, 10}}, // v2,v5,v4
-            {9, {12, 7, 6}}    // v3,v4,v1
-        };
+// --- Third-Party Includes (CORRECT ORDER) ---
+// LinBox/Givaro headers must come BEFORE atopo.h to resolve macro conflicts.
+#include <gmp++/gmp++.h>
+#include <gmp++/gmp++_int.h>
+#include <givaro/zring.h>
+#include <linbox/matrix/dense-matrix.h>
+#include <linbox/solutions/smith-form.h>
 
-        complex = atopo::create_complex_from_source(mesh);
+#include "atopo.h" // Our header, which includes Eigen, comes last.
+
+namespace atopo::detail {
+
+    /**
+     * @brief Computes the Smith Normal Form of a matrix using LinBox.
+     * @param sparse_mat The input sparse incidence matrix from Eigen.
+     * @return A struct containing the rank and torsion coefficients.
+     */
+    SNFResult compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
+        if (sparse_mat.nonZeros() == 0) return {};
+
+        using Integer = Givaro::Integer;
+        using IntRing = Givaro::ZRing<Integer>;
+        using LinBoxMatrix = LinBox::BlasMatrix<IntRing>;
+
+        // 1. Create a LinBox matrix and its associated integer ring.
+        IntRing Z;
+        LinBoxMatrix A(Z, sparse_mat.rows(), sparse_mat.cols());
+
+        // 2. Copy data from Eigen to LinBox.
+        for (int k=0; k < sparse_mat.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<IncidenceCoeff>::InnerIterator it(sparse_mat,k); it; ++it) {
+                A.setEntry(it.row(), it.col(), Integer(it.value()));
+            }
+        }
+        
+        // 3. Call the high-performance Smith Normal Form solver.
+        LinBox::SmithList<IntRing> snf_result;
+        LinBox::smithForm(snf_result, A);
+        
+        // 4. Process the results.
+        SNFResult result;
+        Integer zero(0);
+        Integer one(1);
+
+        for(const auto& factor_pair : snf_result) {
+            // Rank is the number of non-zero factors.
+            if (factor_pair.first != zero) {
+                result.rank += factor_pair.second;
+            }
+            // Torsion coefficients are factors that are not 0 or 1.
+            if (factor_pair.first != zero && factor_pair.first != one) {
+                for(size_t i = 0; i < factor_pair.second; ++i) {
+                    result.torsion_coeffs.push_back(static_cast<long>(factor_pair.first));
+                }
+            }
+        }
+        return result;
     }
 
-    static atopo::CellComplex complex;
-};
-
-atopo::CellComplex RP2IntegrationTest::complex;
-
-TEST_F(RP2IntegrationTest, ComplexCreation) {
-    ASSERT_EQ(complex.getNumberOfCells(0), 6);
-    ASSERT_EQ(complex.getNumberOfCells(1), 15);
-    ASSERT_EQ(complex.getNumberOfCells(2), 10);
-}
-
-TEST_P(RP2IntegrationTest, BoundaryOfBoundaryIsZero_PerFace) {
-    int face_idx = GetParam(); 
-
-    Eigen::SparseVector<int> face_vector(complex.getNumberOfCells(2));
-    face_vector.insert(face_idx) = 1;
-    atopo::Chain<int> single_face_chain(2, std::move(face_vector));
-
-    auto boundary_of_face = atopo::boundary(complex, single_face_chain);
-    auto boundary_of_boundary = atopo::boundary(complex, boundary_of_face);
-    
-    EXPECT_EQ(boundary_of_boundary.data.nonZeros(), 0) 
-        << "Failure on face with index " << face_idx;
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    BoundaryCheck,
-    RP2IntegrationTest,
-    ::testing::Range(0, 10)
-);
-
-TEST_F(RP2IntegrationTest, HomologyCalculation) {
-    auto homology_groups = complex.computeHomology();
-    
-    ASSERT_TRUE(homology_groups.count(0));
-    EXPECT_EQ(homology_groups.at(0).rank, 1);
-    EXPECT_TRUE(homology_groups.at(0).torsion_coeffs.empty());
-
-    ASSERT_TRUE(homology_groups.count(1));
-    EXPECT_EQ(homology_groups.at(1).rank, 0);
-    
-    auto torsion1 = homology_groups.at(1).torsion_coeffs;
-    std::sort(torsion1.begin(), torsion1.end());
-    ASSERT_EQ(torsion1.size(), 1);
-    EXPECT_EQ(torsion1[0], 2);
-    
-    if (homology_groups.count(2)) {
-        EXPECT_EQ(homology_groups.at(2).rank, 0);
-        EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
-    }
-}
+} // namespace atopo::detail
 EOF
 
-echo "✅ Test data for RealProjectivePlane has been corrected."
-echo "   Please clean and rebuild. All tests should now pass."
-echo "   Run: rm -rf build && export PKG_CONFIG_PATH=/opt/lib/pkgconfig:\$PKG_CONFIG_PATH && cmake -S . -B build && cmake --build build && ctest --test-dir build"
+echo "✅ Include order has been corrected."
+echo "   Please clean and rebuild for a warning-free compilation."
+echo "   Run: rm -rf build && export PKG_CONFIG_PATH=/opt/lib/pkgconfig:\$PKG_CONFIG_PATH && cmake -S . -B build && cmake --build build"
