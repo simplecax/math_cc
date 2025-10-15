@@ -1,17 +1,15 @@
-// --- Third-Party Includes (CORRECTED ORDER) ---
-// LinBox/Givaro must come BEFORE our own header to resolve macro conflicts.
 #include <gmp++/gmp++.h>
 #include <gmp++/gmp++_int.h>
 #include <givaro/zring.h>
 #include <linbox/matrix/dense-matrix.h>
 #include <linbox/solutions/smith-form.h>
 
-#include "atopo.h" // Our header, which includes Eigen, comes last.
+#include "atopo.h"
 
 namespace atopo::detail {
 
-    size_t compute_rank_with_linbox(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
-        if (sparse_mat.nonZeros() == 0) return 0;
+    std::vector<long> compute_invariant_factors(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
+        if (sparse_mat.nonZeros() == 0) return {};
 
         using Integer = Givaro::Integer;
         using IntRing = Givaro::ZRing<Integer>;
@@ -20,24 +18,25 @@ namespace atopo::detail {
         IntRing Z;
         LinBoxMatrix A(Z, sparse_mat.rows(), sparse_mat.cols());
 
-        // Copy data from Eigen::SparseMatrix to LinBox::BlasMatrix.
         for (int k=0; k < sparse_mat.outerSize(); ++k) {
             for (Eigen::SparseMatrix<IncidenceCoeff>::InnerIterator it(sparse_mat,k); it; ++it) {
                 A.setEntry(it.row(), it.col(), Integer(it.value()));
             }
         }
         
-        LinBox::SmithList<IntRing> invariant_factors;
-        LinBox::smithForm(invariant_factors, A);
+        LinBox::SmithList<IntRing> snf_result;
+        LinBox::smithForm(snf_result, A);
         
-        size_t rank = 0;
-        for(const auto& factor_pair : invariant_factors) {
-            Integer zero(0);
-        if (factor_pair.first != zero) {
-                rank += factor_pair.second;
+        std::vector<long> factors;
+        Integer one(1);
+        for(const auto& factor_pair : snf_result) {
+            if (factor_pair.first != one && factor_pair.first != Integer(0)) {
+                for(size_t i = 0; i < factor_pair.second; ++i) {
+                    factors.push_back(static_cast<long>(factor_pair.first));
+                }
             }
         }
-        return rank;
+        return factors;
     }
 
 } // namespace atopo::detail
