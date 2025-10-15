@@ -60,6 +60,8 @@ add_executable(atopo_tests
     test/test_atopo.cpp
     test/test_homology.cpp
     test/test_rp2_integration.cpp
+    test/test_validation.cpp
+    test/test_klein_bottle.cpp
 )
 
 # The test executable needs to know where the custom-installed libraries are.
