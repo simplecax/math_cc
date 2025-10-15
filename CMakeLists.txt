@@ -14,32 +14,41 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Eigen3 REQUIRED)
 find_package(GTest REQUIRED)
 
+# Use PkgConfig to find LinBox and its dependencies
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GIVARO REQUIRED givaro)
+pkg_check_modules(FFLAS_FFPACK REQUIRED fflas-ffpack)
+pkg_check_modules(LINBOX REQUIRED linbox)
+
 # --- Library Target ---
 # Define a header-only INTERFACE library for our framework.
-# This makes it reusable and clearly defines its usage requirements.
 add_library(atopo INTERFACE)
 
-# The only public usage requirement for atopo is its include directory.
+# Define the usage requirements for the 'atopo' library.
+# Any target that links to 'atopo' will inherit these.
 target_include_directories(atopo INTERFACE
-    inc
+    inc                         # Its own headers
+    ${LINBOX_INCLUDE_DIRS}      # LinBox headers
+    ${GIVARO_INCLUDE_DIRS}      # Givaro headers
+    ${FFLAS_FFPACK_INCLUDE_DIRS}# Fflas-ffpack headers
 )
-
-# The atopo library itself needs Eigen3.
 target_link_libraries(atopo INTERFACE
     Eigen3::Eigen
+    ${LINBOX_LIBRARIES}
+    ${GIVARO_LIBRARIES}
+    ${FFLAS_FFPACK_LIBRARIES}
 )
 
 # --- Testing Setup with Google Test ---
 enable_testing()
 
-# Add the test executable
 add_executable(atopo_tests
     test/test_atopo.cpp
     test/test_homology.cpp
 )
 
 # Link the test executable against our atopo library and GTest.
-# It will inherit the include paths and Eigen dependency from atopo.
+# It will now correctly inherit all necessary include paths and libraries from 'atopo'.
 target_link_libraries(atopo_tests PRIVATE
     atopo
     GTest::Main
@@ -53,5 +62,5 @@ gtest_discover_tests(atopo_tests)
 # --- Build Information ---
 message(STATUS "Project Name: ${PROJECT_NAME}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "Found Eigen3: ${EIGEN3_INCLUDE_DIR}")
-message(STATUS "Found GTest: ${GTEST_INCLUDE_DIRS}")
+message(STATUS "Found LinBox includes: ${LINBOX_INCLUDE_DIRS}")
+message(STATUS "Found LinBox libs: ${LINBOX_LIBRARIES}")
