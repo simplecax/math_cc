@@ -8,7 +8,7 @@
 
 namespace atopo::detail {
 
-    std::vector<long> compute_invariant_factors(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
+    SNFResult compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
         if (sparse_mat.nonZeros() == 0) return {};
 
         using Integer = Givaro::Integer;
@@ -27,16 +27,23 @@ namespace atopo::detail {
         LinBox::SmithList<IntRing> snf_result;
         LinBox::smithForm(snf_result, A);
         
-        std::vector<long> factors;
+        SNFResult result;
+        Integer zero(0);
         Integer one(1);
+
         for(const auto& factor_pair : snf_result) {
-            if (factor_pair.first != one && factor_pair.first != Integer(0)) {
+            // Rank is the number of non-zero factors
+            if (factor_pair.first != zero) {
+                result.rank += factor_pair.second;
+            }
+            // Torsion is the number of non-one factors
+            if (factor_pair.first != one && factor_pair.first != zero) {
                 for(size_t i = 0; i < factor_pair.second; ++i) {
-                    factors.push_back(static_cast<long>(factor_pair.first));
+                    result.torsion_coeffs.push_back(static_cast<long>(factor_pair.first));
                 }
             }
         }
-        return factors;
+        return result;
     }
 
 } // namespace atopo::detail

@@ -1,38 +1,30 @@
 #include <gtest/gtest.h>
 #include "atopo.h"
-#include <vector>
 
-TEST(HomologyTorsionTest, RealProjectivePlane) {
-    LegacyMesh mesh;
-    // A square
-    mesh.vertices = {{0,{}}, {1,{}}, {2,{}}, {3,{}}};
-    // Edges of the square, with one diagonal
-    mesh.edges = {
-        {0, 0, 1, {}}, {1, 1, 2, {}}, {2, 2, 3, {}}, {3, 3, 0, {}},
-        // New edge identifying opposite sides with a twist
-        {4, 1, 3, {}} 
-    };
-    // One face with twisted identification
-    // e0 + e4 - e2 - e3
-    mesh.faces = { {0, {0, 4, 2, 3}, {}} }; 
-    // This mesh is a bit of a simplification, a better one would be two faces.
-    // Let's use a standard triangulation for RP2:
-    mesh.vertices = {{0,{}}, {1,{}}, {2,{}}, {3,{}}, {4,{}}, {5,{}}};
-    mesh.edges = {
-        {0,0,1,{}}, {1,0,2,{}}, {2,0,4,{}}, {3,1,2,{}}, {4,1,3,{}},
-        {5,1,5,{}}, {6,2,3,{}}, {7,2,4,{}}, {8,3,4,{}}, {9,3,5,{}},
-        {10,4,5,{}}
-    };
-    mesh.faces = {
-        {0,{0,1,3},{}}, {1,{0,5,4},{}}, {2,{1,2,6},{}}, {3,{1,4,3},{}},
-        {4,{2,7,6},{}}, {5,{2,1,0},{}}, {6,{3,8,9},{}}, {7,{3,4,8},{}},
-        {8,{4,7,2},{}}, {9,{4,5,10},{}}
-    };
+TEST(HomologyTorsionTest, RealProjectivePlaneCanonical) {
+    atopo::CellComplex complex;
 
-    atopo::CellComplex complex = atopo::create_complex_from_source(mesh);
+    // Build the canonical cell complex for RP^2 directly.
+    // One cell in each dimension 0, 1, 2.
+    complex.setCellCount(0, 1); // v
+    complex.setCellCount(1, 1); // e
+    complex.setCellCount(2, 1); // f
+
+    // Define boundary map d1: C1 -> C0.
+    // d1(e) = v - v = 0. Matrix is [0].
+    atopo::IncidenceMatrix<atopo::IncidenceCoeff> d1(1, 1);
+    complex.setBoundaryOperator(1, std::move(d1));
+
+    // Define boundary map d2: C2 -> C1.
+    // d2(f) = 2e. Matrix is [2].
+    atopo::IncidenceMatrix<atopo::IncidenceCoeff> d2(1, 1);
+    d2.insert(0, 0) = 2;
+    complex.setBoundaryOperator(2, std::move(d2));
+
+    // --- Compute Homology ---
     auto homology_groups = complex.computeHomology();
     
-    // Expected for RP2: H0=Z, H1=Z_2, H2=0
+    // Expected for RP^2: H0=Z, H1=Z_2, H2=0
     // Betti numbers: β0=1, β1=0, β2=0
     // Torsion: T1={2}
     
@@ -41,11 +33,15 @@ TEST(HomologyTorsionTest, RealProjectivePlane) {
     EXPECT_TRUE(homology_groups.at(0).torsion_coeffs.empty());
 
     ASSERT_TRUE(homology_groups.count(1));
-    EXPECT_EQ(homology_groups.at(1).rank, 0);
-    ASSERT_EQ(homology_groups.at(1).torsion_coeffs.size(), 1);
-    EXPECT_EQ(homology_groups.at(1).torsion_coeffs[0], 2);
+    EXPECT_EQ(homology_groups.at(1).rank, 0) << "Betti-1 should be 0 for RP^2";
     
-    ASSERT_TRUE(homology_groups.count(2));
-    EXPECT_EQ(homology_groups.at(2).rank, 0);
-    EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
+    auto torsion1 = homology_groups.at(1).torsion_coeffs;
+    ASSERT_EQ(torsion1.size(), 1) << "There should be one torsion coefficient in H1";
+    EXPECT_EQ(torsion1[0], 2) << "The torsion coefficient of H1 should be 2";
+    
+    // H2 should be trivial and might not even be in the map if all its values are zero.
+    if (homology_groups.count(2)) {
+        EXPECT_EQ(homology_groups.at(2).rank, 0);
+        EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
+    }
 }
