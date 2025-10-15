@@ -11,14 +11,7 @@
 #include <algorithm>
 #include <numeric>
 
-// --- Third-Party Includes (CORRECTED ORDER AND PATHS) ---
-// LinBox/Givaro must come BEFORE Eigen to resolve macro conflicts.
-#include <gmp++/gmp++.h>
-#include <gmp++/gmp++_int.h>
-#include <givaro/zring.h> // Correct header for ZRing
-#include <linbox/matrix/dense-matrix.h>
-#include <linbox/solutions/smith-form.h>
-
+// Eigen is now the only third-party include here.
 #include <Eigen/Sparse>
 
 namespace atopo {
@@ -41,41 +34,11 @@ namespace atopo {
 
     // --- Implementation Detail for Homology ---
     namespace detail {
+        // DECLARATION ONLY. The definition is in atopo_linbox.cpp
+        size_t compute_rank_with_linbox(const IncidenceMatrix<IncidenceCoeff>& sparse_mat);
+    }
 
-        inline size_t compute_rank_with_linbox(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
-            if (sparse_mat.nonZeros() == 0) return 0;
-
-            using Integer = Givaro::Integer;
-            using IntRing = Givaro::ZRing<Integer>;
-            using LinBoxMatrix = LinBox::BlasMatrix<IntRing>;
-
-            IntRing Z;
-            LinBoxMatrix A(Z, sparse_mat.rows(), sparse_mat.cols());
-
-            // Copy data from Eigen::SparseMatrix to LinBox::BlasMatrix.
-            // This is more robust than a custom wrapper.
-            for (int k=0; k < sparse_mat.outerSize(); ++k) {
-                for (Eigen::SparseMatrix<IncidenceCoeff>::InnerIterator it(sparse_mat,k); it; ++it) {
-                    A.setEntry(it.row(), it.col(), Integer(it.value()));
-                }
-            }
-            
-            LinBox::SmithList<IntRing> invariant_factors;
-            LinBox::smithForm(invariant_factors, A);
-            
-            // The rank is the number of non-one invariant factors.
-            size_t rank = 0;
-            Integer one(1); // Create an Integer object for comparison.
-            for(const auto& factor_pair : invariant_factors) {
-                if (factor_pair.first != one) {
-                    rank += factor_pair.second; // Add multiplicity
-                }
-            }
-            return rank;
-        }
-    } // namespace detail
-
-    // The rest of the file is unchanged, but included for completeness
+    // ... (The rest of the file is the same as before) ...
     template<typename T>
     struct ChainBase {
         int dimension;
@@ -83,10 +46,8 @@ namespace atopo {
         ChainBase(int p, const Eigen::SparseVector<Coefficient<T>>& vec) : dimension(p), data(vec) {}
         ChainBase(int p, Eigen::SparseVector<Coefficient<T>>&& vec) : dimension(p), data(std::move(vec)) {}
     };
-
     template<typename T> struct Chain : public ChainBase<T> { using ChainBase<T>::ChainBase; };
     template<typename T> struct Cochain : public ChainBase<T> { using ChainBase<T>::ChainBase; };
-
     class CellComplex {
     private:
         std::map<int, size_t> m_cell_counts;
@@ -106,24 +67,7 @@ namespace atopo {
             auto it = m_cell_counts.find(dim);
             return (it == m_cell_counts.end()) ? 0 : it->second;
         }
-        [[nodiscard]] IncidenceMatrix<IncidenceCoeff> getIncidenceMap(int from_dim, int to_dim) const {
-            if (to_dim == from_dim - 1) {
-                auto it = m_boundary_maps.find(from_dim);
-                if (it != m_boundary_maps.end()) return it->second;
-            }
-            if (to_dim == from_dim + 1) {
-                auto it = m_boundary_maps.find(to_dim);
-                if (it != m_boundary_maps.end()) return it->second.transpose();
-            }
-            int low_dim = std::min(from_dim, to_dim);
-            int high_dim = std::max(from_dim, to_dim);
-            DimensionPair key = {low_dim, high_dim};
-            auto it = m_general_incidence_maps.find(key);
-            if (it == m_general_incidence_maps.end()) {
-                 return IncidenceMatrix<IncidenceCoeff>(getNumberOfCells(to_dim), getNumberOfCells(from_dim));
-            }
-            return (from_dim < to_dim) ? it->second : it->second.transpose();
-        }
+        [[nodiscard]] IncidenceMatrix<IncidenceCoeff> getIncidenceMap(int from_dim, int to_dim) const;
         [[nodiscard]] std::map<int, int> computeBettiNumbers() const {
             std::map<int, int> betti_numbers;
             int max_dim = 0;
@@ -138,6 +82,11 @@ namespace atopo {
             return betti_numbers;
         }
     };
+    // ... (The rest of the file is the same) ...
+}
+#endif // ATOPO_H
+
+namespace atopo {
     template<typename T>
     [[nodiscard]] Chain<T> boundary(const CellComplex& complex, const Chain<T>& chain) {
         if (chain.dimension <= 0) return Chain<T>(-1, Eigen::SparseVector<T>());
@@ -200,4 +149,3 @@ namespace atopo {
         }
     };
 }
-#endif // ATOPO_H
