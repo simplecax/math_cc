@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "atopo.h"
-#include <vector>
+#include "test_common.h"
+#include <gtest/gtest.h>
 
 // Test fixture for creating complexes from user-defined mesh data
 class HomologyTest : public ::testing::Test {

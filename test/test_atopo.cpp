@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
-#include "atopo.h"
+#include "test_common.h"
+#include <gtest/gtest.h>
 
 // A test fixture class to set up a common environment for all tests.
 // This avoids duplicating the mesh and complex creation code.

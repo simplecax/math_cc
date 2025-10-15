@@ -1,8 +1,6 @@
 #include <gtest/gtest.h>
-#include "atopo.h"
-#include <vector>
-#include <algorithm>
-#include <numeric>
+#include "test_common.h"
+#include <gtest/gtest.h>
 
 // Test fixture for the RP^2 triangulation integration tests.
 class RP2IntegrationTest : public ::testing::TestWithParam<int> {

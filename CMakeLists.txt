@@ -33,6 +33,7 @@ target_include_directories(atopo PUBLIC
 
 # Private includes are only needed to COMPILE the atopo library itself.
 target_include_directories(atopo PRIVATE
+    test # For test_common.h needed by atopo.cpp
     ${LINBOX_INCLUDE_DIRS}
     ${GIVARO_INCLUDE_DIRS}
     ${FFLAS_FFPACK_INCLUDE_DIRS}
@@ -63,6 +64,8 @@ add_executable(atopo_tests
 
 # The test executable needs to know where the custom-installed libraries are.
 target_link_directories(atopo_tests PRIVATE ${LINBOX_LIBRARY_DIRS})
+# The test target needs to find test_common.h
+target_include_directories(atopo_tests PRIVATE test)
 
 # Link the tests against our atopo library and GTest.
 # All other dependencies (LinBox, Eigen, etc.) are inherited from atopo.
