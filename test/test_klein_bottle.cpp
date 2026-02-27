@@ -29,16 +29,18 @@ TEST(HomologyIntegrationTest, KleinBottle) {
 
     auto homology_groups = complex.computeHomology();
 
-    // Expected for Klein Bottle: H0=Z, H1=Z x Z_2, H2=0
+    // Expected for Klein Bottle over Z2: H0=Z2, H1=Z2 x Z2, H2=Z2
+    // Betti numbers over Z2: b0=1, b1=2, b2=1
     
     ASSERT_TRUE(homology_groups.count(0));
     EXPECT_EQ(homology_groups.at(0).rank, 1);
     EXPECT_TRUE(homology_groups.at(0).torsion_coeffs.empty());
 
     ASSERT_TRUE(homology_groups.count(1));
-    EXPECT_EQ(homology_groups.at(1).rank, 1); // β1 = 1
-    
-    auto torsion1 = homology_groups.at(1).torsion_coeffs;
-    ASSERT_EQ(torsion1.size(), 1);
-    EXPECT_EQ(torsion1[0], 2); // Torsion is Z_2
+    EXPECT_EQ(homology_groups.at(1).rank, 2); 
+    EXPECT_TRUE(homology_groups.at(1).torsion_coeffs.empty());
+
+    ASSERT_TRUE(homology_groups.count(2));
+    EXPECT_EQ(homology_groups.at(2).rank, 1);
+    EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
 }

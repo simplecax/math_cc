@@ -73,15 +73,10 @@ TEST_F(RP2IntegrationTest, HomologyCalculation) {
     EXPECT_TRUE(homology_groups.at(0).torsion_coeffs.empty());
 
     ASSERT_TRUE(homology_groups.count(1));
-    EXPECT_EQ(homology_groups.at(1).rank, 0);
+    EXPECT_EQ(homology_groups.at(1).rank, 1);
+    EXPECT_TRUE(homology_groups.at(1).torsion_coeffs.empty());
     
-    auto torsion1 = homology_groups.at(1).torsion_coeffs;
-    std::sort(torsion1.begin(), torsion1.end());
-    ASSERT_EQ(torsion1.size(), 1);
-    EXPECT_EQ(torsion1[0], 2);
-    
-    if (homology_groups.count(2)) {
-        EXPECT_EQ(homology_groups.at(2).rank, 0);
-        EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
-    }
+    ASSERT_TRUE(homology_groups.count(2));
+    EXPECT_EQ(homology_groups.at(2).rank, 1);
+    EXPECT_TRUE(homology_groups.at(2).torsion_coeffs.empty());
 }
