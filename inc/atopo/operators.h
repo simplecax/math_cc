@@ -3,7 +3,6 @@
 
 #include <atopo/complex.h>
 #include <atopo/chain.h>
-#include <atopo/traits.h>
 
 namespace atopo {
     // --- TEMPLATE DEFINITIONS MOVED HERE ---

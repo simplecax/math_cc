@@ -6,9 +6,12 @@
 // headers they need from the 'atopo/' subdirectory.
 
 #include <atopo/core.h>
-#include <atopo/traits.h>
+#include <atopo/concepts.h>
+#include <atopo/math.h>
 #include <atopo/chain.h>
 #include <atopo/complex.h>
 #include <atopo/operators.h>
+#include <atopo/persistence.h>
+#include <atopo/query.h>
 
 #endif // ATOPO_H

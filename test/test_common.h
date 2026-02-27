@@ -90,12 +90,3 @@ struct LegacyMesh {
         return result;
     }
 };
-
-// --- Glue Code for Compatibility ---
-namespace atopo {
-    template<> struct TopologySourceTraits<LegacyMesh> {
-        static CellComplex build(const LegacyMesh& mesh) {
-            return CellComplex::build(mesh);
-        }
-    };
-}

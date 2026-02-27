@@ -6,6 +6,9 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <iostream>
+#include <string>
+#include <sstream>
 
 namespace atopo {
 
@@ -13,9 +16,29 @@ namespace atopo {
         int birth_idx;
         int death_idx; // -1 for essential
         int dimension;
+
+        std::string to_string() const {
+            std::stringstream ss;
+            ss << "Dim " << dimension << ": [" << birth_idx << ", ";
+            if (death_idx == -1) ss << "inf"; else ss << death_idx;
+            ss << ")";
+            return ss.str();
+        }
     };
 
     using PersistenceDiagram = std::vector<PersistencePoint>;
+
+    /**
+     * @brief Formats the diagram as a human-readable summary.
+     */
+    inline std::string summarize_persistence(const PersistenceDiagram& diagram) {
+        std::stringstream ss;
+        ss << "--- Persistence Summary ---\n";
+        for (const auto& p : diagram) {
+            ss << p.to_string() << "\n";
+        }
+        return ss.str();
+    }
 
     /**
      * @brief Computes persistent homology over Z2.
