@@ -2,12 +2,10 @@
 #define ATOPO_COMPLEX_H
 
 #include <atopo/core.h>
+#include <atopo/concepts.h>
+#include <map>
 
 namespace atopo {
-    HomologyGroup compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat);
-    }
-
-namespace atopo { 
     namespace detail { 
         HomologyGroup compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat); 
     } 
@@ -22,6 +20,33 @@ namespace atopo {
         [[nodiscard]] size_t getNumberOfCells(int dim) const;
         [[nodiscard]] IncidenceMatrix<IncidenceCoeff> getIncidenceMap(int from_dim, int to_dim) const;
         [[nodiscard]] std::map<int, HomologyGroup> computeHomology() const;
+
+        /**
+         * @brief Generic builder that works with any type satisfying the Complex concept.
+         */
+        template<concepts::Complex T>
+        static CellComplex build(const T& source) {
+            CellComplex complex;
+            
+            for (int dim = 0; dim <= 3; ++dim) {
+                size_t count = source.cell_count(dim);
+                if (count == 0 && dim > 0) continue; 
+                complex.setCellCount(dim, count);
+
+                if (dim > 0) {
+                    IncidenceMatrix<IncidenceCoeff> d(source.cell_count(dim-1), count);
+                    size_t cell_idx = 0;
+                    for (const auto& cell : source.cells(dim)) {
+                        for (const auto& entry : cell.boundary()) {
+                            d.insert(entry.index, cell_idx) = static_cast<IncidenceCoeff>(entry.coefficient);
+                        }
+                        cell_idx++;
+                    }
+                    complex.setBoundaryOperator(dim, std::move(d));
+                }
+            }
+            return complex;
+        }
     };
 }
 #endif // ATOPO_COMPLEX_H

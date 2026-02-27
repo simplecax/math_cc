@@ -53,49 +53,4 @@ namespace atopo {
         }
         return homology;
     }
-    
-    CellComplex TopologySourceTraits<LegacyMesh>::build(const LegacyMesh& mesh) {
-        CellComplex complex;
-        complex.setCellCount(0, mesh.vertices.size());
-        complex.setCellCount(1, mesh.edges.size());
-        complex.setCellCount(2, mesh.faces.size());
-        
-        IncidenceMatrix<IncidenceCoeff> d1(mesh.vertices.size(), mesh.edges.size());
-        for (const auto& edge : mesh.edges) {
-            d1.insert(edge.v_start, edge.id) = -1;
-            d1.insert(edge.v_end, edge.id) = 1;
-        }
-        complex.setBoundaryOperator(1, std::move(d1));
-
-        IncidenceMatrix<IncidenceCoeff> d2(mesh.edges.size(), mesh.faces.size());
-        for (const auto& face : mesh.faces) {
-            if (face.edge_loop.size() < 2) continue;
-
-            const auto& e0 = mesh.edges.at(face.edge_loop[0]);
-            const auto& e1 = mesh.edges.at(face.edge_loop[1]);
-
-            size_t v_start;
-            if (e0.v_end == e1.v_start || e0.v_end == e1.v_end) { v_start = e0.v_start; }
-            else { v_start = e0.v_end; }
-            
-            size_t current_v = v_start;
-            for (size_t edge_id : face.edge_loop) {
-                const auto& edge = mesh.edges.at(edge_id);
-                if (edge.v_start == current_v) {
-                    d2.insert(edge.id, face.id) = 1;
-                    current_v = edge.v_end;
-                } else if (edge.v_end == current_v) {
-                    d2.insert(edge.id, face.id) = -1;
-                    current_v = edge.v_start;
-                } else {
-                    throw std::runtime_error("Face " + std::to_string(face.id) + " has a discontinuous edge loop.");
-                }
-            }
-            if (current_v != v_start) {
-                throw std::runtime_error("Face " + std::to_string(face.id) + " has an open edge loop.");
-            }
-        }
-        complex.setBoundaryOperator(2, std::move(d2));
-        return complex;
-    }
 }

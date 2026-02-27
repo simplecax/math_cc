@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 #include "test_common.h"
-#include <gtest/gtest.h>
 
 // Test fixture for creating complexes from user-defined mesh data
 class HomologyTest : public ::testing::Test {
@@ -33,29 +32,33 @@ protected:
 
 TEST_F(HomologyTest, SingleEdge) {
     LegacyMesh mesh;
-    mesh.vertices = {{0, {}}, {1, {}}};
-    mesh.edges = {{0, 0, 1, {}}};
+    mesh.add_vertex(0); mesh.add_vertex(1);
+    mesh.add_edge(0, 0, 1);
     RunTest(mesh, {{0, {1, {}}}, {1, {0, {}}}});
 }
 
 TEST_F(HomologyTest, TwoDisconnectedEdges) {
     LegacyMesh mesh;
-    mesh.vertices = {{0, {}}, {1, {}}, {2, {}}, {3, {}}};
-    mesh.edges = {{0, 0, 1, {}}, {1, 2, 3, {}}};
+    mesh.add_vertex(0); mesh.add_vertex(1); mesh.add_vertex(2); mesh.add_vertex(3);
+    mesh.add_edge(0, 0, 1); mesh.add_edge(1, 2, 3);
     RunTest(mesh, {{0, {2, {}}}, {1, {0, {}}}});
 }
 
 TEST_F(HomologyTest, CircleLoop) {
     LegacyMesh mesh;
-    mesh.vertices = {{0, {}}, {1, {}}, {2, {}}};
-    mesh.edges = {{0, 0, 1, {}}, {1, 1, 2, {}}, {2, 2, 0, {}}};
+    mesh.add_vertex(0); mesh.add_vertex(1); mesh.add_vertex(2);
+    mesh.add_edge(0, 0, 1); mesh.add_edge(1, 1, 2); mesh.add_edge(2, 2, 0);
     RunTest(mesh, {{0, {1, {}}}, {1, {1, {}}}});
 }
 
 TEST_F(HomologyTest, Sphere) {
     LegacyMesh mesh;
-    mesh.vertices = {{0,{}}, {1,{}}, {2,{}}, {3,{}}};
-    mesh.edges = {{0,0,1,{}}, {1,0,2,{}}, {2,0,3,{}}, {3,1,2,{}}, {4,1,3,{}}, {5,2,3,{}}};
-    mesh.faces = {{0, {0, 3, 1}, {}}, {1, {0, 4, 2}, {}}, {2, {1, 5, 2}, {}}, {3, {3, 5, 4}, {}}};
+    mesh.add_vertex(0); mesh.add_vertex(1); mesh.add_vertex(2); mesh.add_vertex(3);
+    mesh.add_edge(0, 0, 1); mesh.add_edge(1, 0, 2); mesh.add_edge(2, 0, 3);
+    mesh.add_edge(3, 1, 2); mesh.add_edge(4, 1, 3); mesh.add_edge(5, 2, 3);
+    mesh.add_face(0, {0, 3, 1}); 
+    mesh.add_face(1, {0, 4, 2}); 
+    mesh.add_face(2, {1, 5, 2}); 
+    mesh.add_face(3, {3, 5, 4}); 
     RunTest(mesh, {{0, {1, {}}}, {1, {0, {}}}, {2, {1, {}}}});
 }

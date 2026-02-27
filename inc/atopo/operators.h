@@ -25,9 +25,9 @@ namespace atopo {
         return Cochain<T>(p + 1, std::move(coboundary_vector));
     }
 
-    template<typename TopologySource>
-    [[nodiscard]] CellComplex create_complex_from_source(const TopologySource& source) {
-        return TopologySourceTraits<TopologySource>::build(source);
+    template<concepts::Complex T>
+    [[nodiscard]] CellComplex create_complex_from_source(const T& source) {
+        return CellComplex::build(source);
     }
 }
 #endif // ATOPO_OPERATORS_H
