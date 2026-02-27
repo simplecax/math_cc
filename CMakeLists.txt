@@ -38,13 +38,11 @@ target_link_libraries(atopo
 # --- Testing Setup ---
 enable_testing()
 add_executable(atopo_tests
-    test/test_atopo.cpp
-    test/test_homology.cpp
-    test/test_rp2_integration.cpp
-    test/test_validation.cpp
-    test/test_klein_bottle.cpp
-    test/test_operators.cpp
-    test/test_persistence.cpp
+    test/test_unit_math.cpp
+    test/test_unit_concepts.cpp
+    test/test_unit_operators.cpp
+    test/test_integration_homology.cpp
+    test/test_integration_persistence.cpp
 )
 
 # The test target needs to find test_common.h
@@ -61,4 +59,3 @@ gtest_discover_tests(atopo_tests)
 
 message(STATUS "Project Name: ${PROJECT_NAME}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "Found LinBox libs: ${LINBOX_LIBRARIES}")
