@@ -44,6 +44,7 @@ add_executable(atopo_tests
     test/test_validation.cpp
     test/test_klein_bottle.cpp
     test/test_operators.cpp
+    test/test_persistence.cpp
 )
 
 # The test target needs to find test_common.h

@@ -37,6 +37,16 @@ namespace atopo::concepts {
         requires Cell<std::ranges::range_value_t<decltype(std::declval<T>().cells(dim))>>;
     };
 
+    /**
+     * @brief A Filtration defines an ordering of cells in a complex.
+     */
+    template<typename F, typename C>
+    concept Filtration = requires(const F f, const C& complex) {
+        // A filtration must provide a way to get the global index of cells in their birth order.
+        { f.ordered_cells(complex) } -> std::ranges::input_range;
+        // Each element in the range should be a pair of (dimension, local_index)
+    };
+
 } // namespace atopo::concepts
 
 #endif // ATOPO_CONCEPTS_H
