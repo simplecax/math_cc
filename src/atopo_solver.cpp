@@ -2,75 +2,130 @@
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
+#include <numeric>
 
 namespace atopo::detail {
 
     /**
-     * @brief Computes the rank of a sparse matrix over Z2 (binary field).
-     * This replaces the LinBox Smith Normal Form solver.
-     * Note: Torsion coefficients will be empty as Z2 does not capture them.
+     * @brief Union-Find (Disjoint Set Union) for fast rank calculation.
+     */
+    struct DSU {
+        std::vector<int> parent;
+        int components;
+        DSU(int n) : parent(n), components(n) {
+            std::iota(parent.begin(), parent.end(), 0);
+        }
+        int find(int i) {
+            if (parent[i] == i) return i;
+            return parent[i] = find(parent[i]);
+        }
+        void unite(int i, int j) {
+            int root_i = find(i);
+            int root_j = find(j);
+            if (root_i != root_j) {
+                parent[root_i] = root_j;
+                components--;
+            }
+        }
+    };
+
+    /**
+     * @brief Computes rank using Union-Find for matrices with <= 2 ones per column.
+     * In Z2, the rank of a graph incidence matrix is V - (number of components).
+     * If a component has an "open" edge (column with only one 1), it doesn't reduce rank.
+     */
+    size_t computeGraphRankZ2(const IncidenceMatrix<IncidenceCoeff>& mat) {
+        int numRows = static_cast<int>(mat.rows());
+        DSU dsu(numRows);
+        std::vector<bool> has_boundary_edge(numRows, false);
+
+        for (int j = 0; j < mat.cols(); ++j) {
+            std::vector<int> rows;
+            for (Eigen::SparseMatrix<IncidenceCoeff>::InnerIterator it(mat, j); it; ++it) {
+                if (it.value() % 2 != 0) rows.push_back(it.row());
+            }
+
+            if (rows.size() == 2) {
+                dsu.unite(rows[0], rows[1]);
+            } else if (rows.size() == 1) {
+                has_boundary_edge[rows[0]] = true;
+            }
+        }
+
+        // A component is "closed" if none of its vertices connect to a single-entry column.
+        std::unordered_map<int, bool> component_is_open;
+        for (int i = 0; i < numRows; ++i) {
+            int root = dsu.find(i);
+            if (has_boundary_edge[i]) component_is_open[root] = true;
+        }
+
+        int closed_components = 0;
+        std::vector<bool> root_seen(numRows, false);
+        for (int i = 0; i < numRows; ++i) {
+            int root = dsu.find(i);
+            if (!root_seen[root]) {
+                root_seen[root] = true;
+                if (!component_is_open[root]) closed_components++;
+            }
+        }
+
+        return numRows - closed_components;
+    }
+
+    /**
+     * @brief Enhanced Z2 solver with fast-paths for CAD/Manifold structures.
      */
     HomologyGroup compute_snf_results(const IncidenceMatrix<IncidenceCoeff>& sparse_mat) {
         if (sparse_mat.nonZeros() == 0) return {};
 
+        int numRows = static_cast<int>(sparse_mat.rows());
         int numCols = static_cast<int>(sparse_mat.cols());
-        
-        // pivot_to_col[row_index] = col_index
-        // Records which column (index) is currently providing the pivot at a given row.
-        std::unordered_map<int, int> pivot_to_col;
-        
-        // Use a vector of sorted row indices to represent each column in Z2.
-        // For Z2, addition is XOR, which corresponds to the symmetric difference of index sets.
+
+        // --- Fast Path Check ---
+        bool graph_like_cols = true;
+        for (int j = 0; j < numCols; ++j) {
+            int count = 0;
+            for (Eigen::SparseMatrix<IncidenceCoeff>::InnerIterator it(sparse_mat, j); it; ++it) {
+                if (it.value() % 2 != 0) count++;
+            }
+            if (count > 2) { graph_like_cols = false; break; }
+        }
+
+        if (graph_like_cols) {
+            HomologyGroup res;
+            res.rank = computeGraphRankZ2(sparse_mat);
+            return res;
+        }
+
+        // --- Fallback: Optimized Gaussian Elimination ---
         using Z2Vector = std::vector<int>;
-        std::vector<Z2Vector> reduced_columns(numCols);
+        std::unordered_map<int, Z2Vector> pivot_cols; // pivot_row -> reduced_column
 
         for (int j = 0; j < numCols; ++j) {
-            Z2Vector& curr = reduced_columns[j];
-            
-            // 1. Initialize current column from sparse matrix (project to Z2).
-            // We use the parity of the incidence coefficients.
+            Z2Vector curr;
             for (Eigen::SparseMatrix<IncidenceCoeff>::InnerIterator it(sparse_mat, j); it; ++it) {
-                if (it.value() % 2 != 0) {
-                    curr.push_back(it.row());
-                }
+                if (it.value() % 2 != 0) curr.push_back(it.row());
             }
-            // Eigen's SparseMatrix InnerIterator typically visits in increasing row order for ColMajor.
-            // But we sort just to be absolutely safe for set_symmetric_difference.
             std::sort(curr.begin(), curr.end());
 
-            // 2. Reduce the column using Gaussian Elimination (XOR-based).
             while (!curr.empty()) {
-                // The pivot is the highest row index (last element in our sorted vector).
                 int pivot = curr.back();
-                auto it_pivot = pivot_to_col.find(pivot);
-                
-                if (it_pivot == pivot_to_col.end()) {
-                    // This row hasn't been used as a pivot yet.
-                    pivot_to_col[pivot] = j;
+                if (pivot_cols.find(pivot) == pivot_cols.end()) {
+                    pivot_cols[pivot] = std::move(curr);
                     break;
                 } else {
-                    // Collision: XOR with the existing column that already has this pivot.
-                    int other_idx = it_pivot->second;
-                    const Z2Vector& other = reduced_columns[other_idx];
-                    
+                    const Z2Vector& other = pivot_cols[pivot];
                     Z2Vector next_curr;
-                    next_curr.reserve(curr.size() + other.size());
-                    
-                    // Symmetric difference is equivalent to XOR for sets of non-zero indices.
-                    std::set_symmetric_difference(
-                        curr.begin(), curr.end(),
-                        other.begin(), other.end(),
-                        std::back_inserter(next_curr)
-                    );
+                    std::set_symmetric_difference(curr.begin(), curr.end(),
+                                                other.begin(), other.end(),
+                                                std::back_inserter(next_curr));
                     curr = std::move(next_curr);
                 }
             }
         }
 
-        // The rank of the matrix over Z2 is the number of pivots found.
         HomologyGroup result;
-        result.rank = pivot_to_col.size();
-        result.torsion_coeffs = {}; // Z2 coefficients do not capture torsion (Z coefficients required).
+        result.rank = pivot_cols.size();
         return result;
     }
 
