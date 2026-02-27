@@ -27,10 +27,10 @@ namespace atopo {
         template<concepts::Complex T>
         static CellComplex build(const T& source) {
             CellComplex complex;
+            int max_d = source.max_dim();
             
-            for (int dim = 0; dim <= 3; ++dim) {
+            for (int dim = 0; dim <= max_d; ++dim) {
                 size_t count = source.cell_count(dim);
-                if (count == 0 && dim > 0) continue; 
                 complex.setCellCount(dim, count);
 
                 if (dim > 0) {
@@ -42,7 +42,10 @@ namespace atopo {
                         }
                         cell_idx++;
                     }
-                    complex.setBoundaryOperator(dim, std::move(d));
+                    d.makeCompressed();
+                    if (d.nonZeros() > 0) {
+                        complex.setBoundaryOperator(dim, std::move(d));
+                    }
                 }
             }
             return complex;

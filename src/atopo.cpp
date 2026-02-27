@@ -18,7 +18,9 @@ namespace atopo {
     IncidenceMatrix<IncidenceCoeff> CellComplex::getIncidenceMap(int from_dim, int to_dim) const {
         if (to_dim == from_dim - 1) {
             auto it = m_boundary_maps.find(from_dim);
-            if (it != m_boundary_maps.end()) return it->second;
+            if (it != m_boundary_maps.end()) {
+                return it->second;
+            }
         }
         if (to_dim == from_dim + 1) {
             auto it = m_boundary_maps.find(to_dim);

@@ -30,6 +30,7 @@ namespace atopo::concepts {
      */
     template<typename T>
     concept Complex = requires(const T c, int dim) {
+        { c.max_dim() } -> std::convertible_to<int>;
         { c.cell_count(dim) } -> std::convertible_to<std::size_t>;
         // Should be able to iterate over all cells of a given dimension.
         { c.cells(dim) } -> std::ranges::input_range;

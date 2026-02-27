@@ -43,6 +43,7 @@ add_executable(atopo_tests
     test/test_rp2_integration.cpp
     test/test_validation.cpp
     test/test_klein_bottle.cpp
+    test/test_operators.cpp
 )
 
 # The test target needs to find test_common.h
