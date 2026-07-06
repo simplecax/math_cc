@@ -13,5 +13,6 @@
 #include <atopo/operators.h>
 #include <atopo/persistence.h>
 #include <atopo/query.h>
+#include <atopo/dynamic_complex.h>
 
 #endif // ATOPO_H

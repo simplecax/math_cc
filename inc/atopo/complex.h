@@ -51,5 +51,8 @@ namespace atopo {
             return complex;
         }
     };
+    
+    // Alias for the dual-layer architecture
+    using StaticComplex = CellComplex;
 }
 #endif // ATOPO_COMPLEX_H
