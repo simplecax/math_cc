@@ -23,9 +23,10 @@ namespace atopo {
      * mapping them 1:1 via the cell's index.
      */
     class DynamicCell {
-    public:
+    private:
         int m_dimension;
         std::vector<DynamicBoundaryEntry> m_boundary;
+    public:
 
         explicit DynamicCell(int dim) : m_dimension(dim) {}
         

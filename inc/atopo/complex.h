@@ -35,14 +35,18 @@ namespace atopo {
 
                 if (dim > 0) {
                     IncidenceMatrix<IncidenceCoeff> d(source.cell_count(dim-1), count);
+                    std::vector<Eigen::Triplet<IncidenceCoeff>> triplets;
+                    // Heuristic reserve: assume an average of 4 boundary elements per cell
+                    triplets.reserve(count * 4);
+                    
                     size_t cell_idx = 0;
                     for (const auto& cell : source.cells(dim)) {
                         for (const auto& entry : cell.boundary()) {
-                            d.insert(entry.index, cell_idx) = static_cast<IncidenceCoeff>(entry.coefficient);
+                            triplets.emplace_back(entry.index, cell_idx, static_cast<IncidenceCoeff>(entry.coefficient));
                         }
                         cell_idx++;
                     }
-                    d.makeCompressed();
+                    d.setFromTriplets(triplets.begin(), triplets.end());
                     if (d.nonZeros() > 0) {
                         complex.setBoundaryOperator(dim, std::move(d));
                     }
